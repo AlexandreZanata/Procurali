@@ -1,0 +1,834 @@
+{
+  "schema_version": 1,
+  "documentation_version": "1.1",
+  "business_baseline_status": "recommended",
+  "last_updated": "2026-10-07",
+  "language": "English",
+  "path_base": "docs/",
+  "purpose": "Find the canonical document for an AI-maintained task without duplicating business rules.",
+  "entry_points": {
+    "repository_instructions": "../AGENTS.md",
+    "documentation_instructions": "AGENTS.md",
+    "documentation_index": "README.md",
+    "project_status": "maintenance/project-status.md",
+    "original_reading_order": "BUSINESS_LOGIC_SPECIFICATION.md",
+    "agent_workflow": "maintenance/agent-workflow.md"
+  },
+  "conventions": {
+    "related_path_base": "docs/",
+    "canonical_kind": "business-specification",
+    "scope_values": [
+      "mvp",
+      "post-mvp",
+      "future",
+      "mixed",
+      "documentation"
+    ],
+    "mixed_scope_meaning": "Contains explicitly separated release scopes; not all content is mandatory MVP.",
+    "stable_references": {
+      "DOC": "Canonical document",
+      "INV": "Business invariant",
+      "AC": "Acceptance scenario",
+      "EC": "Edge case",
+      "DEC": "Future decision record"
+    },
+    "authority": "Current authorized task instructions and canonical business topic text; navigation metadata is not a second business specification."
+  },
+  "documents": [
+    {
+      "id": "DOC-01",
+      "path": "product/overview.md",
+      "title": "1. Executive summary",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "1"
+      ],
+      "summary": "Product purpose and the reverse marketplace hypothesis",
+      "related": [
+        "product/principles-and-policies.md",
+        "product/glossary.md",
+        "product/mvp-scope.md",
+        "product/out-of-scope.md"
+      ]
+    },
+    {
+      "id": "DOC-02",
+      "path": "product/principles-and-policies.md",
+      "title": "2. Business principles and decision baseline",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "2"
+      ],
+      "summary": "Principles, policy defaults, thresholds, and recommended business decisions",
+      "related": [
+        "domain/state-transitions.md",
+        "domain/invariants.md",
+        "workflows/requests.md",
+        "workflows/offers.md",
+        "workflows/whatsapp-contact.md",
+        "commercial/monetization.md",
+        "measurement/metrics.md"
+      ]
+    },
+    {
+      "id": "DOC-03",
+      "path": "product/glossary.md",
+      "title": "3. Domain glossary",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "3"
+      ],
+      "summary": "Shared terminology and meanings used throughout the domain",
+      "related": [
+        "product/overview.md",
+        "domain/entities.md"
+      ]
+    },
+    {
+      "id": "DOC-04",
+      "path": "domain/users.md",
+      "title": "4. User types and account lifecycle",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mvp",
+      "source_sections": [
+        "4"
+      ],
+      "summary": "Contextual roles, registration, phone control, and account eligibility",
+      "related": [
+        "domain/state-transitions.md",
+        "trust/privacy-and-security.md",
+        "trust/reports-and-moderation.md",
+        "domain/permissions.md"
+      ]
+    },
+    {
+      "id": "DOC-05",
+      "path": "domain/entities.md",
+      "title": "5. Conceptual domain entities and capabilities",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "5.1–5.16"
+      ],
+      "summary": "Conceptual entities, ownership, responsibilities, and relationships",
+      "related": [
+        "product/glossary.md",
+        "domain/state-transitions.md",
+        "domain/invariants.md",
+        "domain/permissions.md",
+        "domain/capabilities.md"
+      ]
+    },
+    {
+      "id": "DOC-05-CAPABILITIES",
+      "path": "domain/capabilities.md",
+      "title": "5.17 Domain capabilities",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "5.17"
+      ],
+      "summary": "Cross-entity business operations, inputs, validations, and results",
+      "related": [
+        "domain/entities.md",
+        "domain/state-transitions.md",
+        "domain/invariants.md",
+        "domain/permissions.md"
+      ]
+    },
+    {
+      "id": "DOC-06",
+      "path": "domain/state-transitions.md",
+      "title": "6. States and state transitions",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "6"
+      ],
+      "summary": "Lifecycles, transition guards, closure effects, and restriction precedence",
+      "related": [
+        "domain/users.md",
+        "domain/invariants.md",
+        "workflows/requests.md",
+        "workflows/offers.md",
+        "workflows/whatsapp-contact.md",
+        "trust/reports-and-moderation.md"
+      ]
+    },
+    {
+      "id": "DOC-07",
+      "path": "domain/invariants.md",
+      "title": "7. Business rules and invariants",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "7"
+      ],
+      "summary": "INV-01 through INV-44 and duplicate-intent rules",
+      "related": [
+        "product/principles-and-policies.md",
+        "domain/entities.md",
+        "domain/state-transitions.md",
+        "domain/permissions.md"
+      ]
+    },
+    {
+      "id": "DOC-08",
+      "path": "workflows/requests.md",
+      "title": "8. Request creation and maintenance",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mvp",
+      "source_sections": [
+        "8"
+      ],
+      "summary": "Request publication, revision, renewal, closure, and launch categories",
+      "related": [
+        "product/principles-and-policies.md",
+        "domain/state-transitions.md",
+        "domain/invariants.md",
+        "workflows/offers.md",
+        "workflows/outcomes.md"
+      ]
+    },
+    {
+      "id": "DOC-09",
+      "path": "workflows/discovery.md",
+      "title": "9. Local discovery",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mvp",
+      "source_sections": [
+        "9"
+      ],
+      "summary": "Local filters, deterministic ordering, and public request access",
+      "related": [
+        "product/principles-and-policies.md",
+        "domain/invariants.md",
+        "workflows/requests.md",
+        "workflows/sharing.md"
+      ]
+    },
+    {
+      "id": "DOC-10",
+      "path": "workflows/offers.md",
+      "title": "10. Offer workflow",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mvp",
+      "source_sections": [
+        "10"
+      ],
+      "summary": "Submission, private comparison, viewing, editing, and withdrawal",
+      "related": [
+        "product/principles-and-policies.md",
+        "domain/state-transitions.md",
+        "domain/invariants.md",
+        "workflows/requests.md",
+        "workflows/whatsapp-contact.md"
+      ]
+    },
+    {
+      "id": "DOC-11",
+      "path": "workflows/whatsapp-contact.md",
+      "title": "11. WhatsApp contact workflow",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mvp",
+      "source_sections": [
+        "11"
+      ],
+      "summary": "Buyer-initiated handoff, contextual message, privacy, and deduplication",
+      "related": [
+        "domain/state-transitions.md",
+        "domain/invariants.md",
+        "workflows/offers.md",
+        "workflows/outcomes.md",
+        "trust/privacy-and-security.md"
+      ]
+    },
+    {
+      "id": "DOC-12",
+      "path": "workflows/outcomes.md",
+      "title": "12. Outcome and completion workflow",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mvp",
+      "source_sections": [
+        "12"
+      ],
+      "summary": "Outcome prompts, completion, attribution, and complete/alternate journeys",
+      "related": [
+        "domain/state-transitions.md",
+        "workflows/whatsapp-contact.md",
+        "trust/reputation.md",
+        "measurement/metrics.md"
+      ]
+    },
+    {
+      "id": "DOC-13",
+      "path": "workflows/sharing.md",
+      "title": "13. Sharing and acquisition",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mvp",
+      "source_sections": [
+        "13"
+      ],
+      "summary": "Share actions, direct links, registration continuity, and acquisition attribution",
+      "related": [
+        "workflows/requests.md",
+        "workflows/discovery.md",
+        "workflows/whatsapp-contact.md",
+        "trust/privacy-and-security.md",
+        "measurement/metrics.md"
+      ]
+    },
+    {
+      "id": "DOC-14",
+      "path": "trust/reputation.md",
+      "title": "14. Reputation",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "14"
+      ],
+      "summary": "Factual evidence, structured feedback, and manipulation controls",
+      "related": [
+        "workflows/whatsapp-contact.md",
+        "workflows/outcomes.md",
+        "trust/privacy-and-security.md",
+        "trust/reports-and-moderation.md",
+        "measurement/metrics.md"
+      ]
+    },
+    {
+      "id": "DOC-15",
+      "path": "trust/privacy-and-security.md",
+      "title": "15. Privacy and security",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "15"
+      ],
+      "summary": "Visibility, progressive safeguards, deletion, and proposed retention policy",
+      "related": [
+        "domain/users.md",
+        "workflows/whatsapp-contact.md",
+        "trust/reports-and-moderation.md",
+        "domain/permissions.md"
+      ]
+    },
+    {
+      "id": "DOC-16",
+      "path": "trust/reports-and-moderation.md",
+      "title": "16. Reports and moderation",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mvp",
+      "source_sections": [
+        "16"
+      ],
+      "summary": "Reports, severity, decisions, appeals, blocking, prohibitions, and staff operations",
+      "related": [
+        "domain/users.md",
+        "domain/state-transitions.md",
+        "domain/invariants.md",
+        "trust/privacy-and-security.md",
+        "domain/permissions.md"
+      ]
+    },
+    {
+      "id": "DOC-17",
+      "path": "commercial/professional-sellers.md",
+      "title": "17. Professional sellers",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "17"
+      ],
+      "summary": "Commercial declaration and professional/free access distinctions",
+      "related": [
+        "domain/users.md",
+        "commercial/radar-pro.md",
+        "commercial/monetization.md",
+        "domain/permissions.md"
+      ]
+    },
+    {
+      "id": "DOC-18",
+      "path": "commercial/radar-pro.md",
+      "title": "18. Radar Pro",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "post-mvp",
+      "source_sections": [
+        "18"
+      ],
+      "summary": "Saved criteria, deterministic matching, alerts, and entitlement effects",
+      "related": [
+        "workflows/discovery.md",
+        "commercial/professional-sellers.md",
+        "commercial/monetization.md",
+        "measurement/metrics.md",
+        "domain/permissions.md"
+      ]
+    },
+    {
+      "id": "DOC-19",
+      "path": "commercial/monetization.md",
+      "title": "19. Monetization",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "19"
+      ],
+      "summary": "Free access, proposed plans, intervals, downgrade, temporary passes, and future intelligence",
+      "related": [
+        "product/principles-and-policies.md",
+        "commercial/professional-sellers.md",
+        "commercial/radar-pro.md",
+        "product/mvp-scope.md",
+        "product/roadmap.md"
+      ]
+    },
+    {
+      "id": "DOC-20",
+      "path": "measurement/metrics.md",
+      "title": "20. Business metrics",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "20.6",
+        "20.7",
+        "20.8"
+      ],
+      "summary": "Measurement windows, formulas, contact evidence, retention, and professional indicators",
+      "related": [
+        "product/overview.md",
+        "product/principles-and-policies.md",
+        "workflows/whatsapp-contact.md",
+        "workflows/outcomes.md",
+        "workflows/sharing.md",
+        "trust/reputation.md",
+        "commercial/radar-pro.md",
+        "measurement/events.md",
+        "measurement/liquidity.md"
+      ]
+    },
+    {
+      "id": "DOC-20-EVENTS",
+      "path": "measurement/events.md",
+      "title": "20. Business events, metrics, and liquidity",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "20.1",
+        "20.2",
+        "20.3",
+        "20.4",
+        "20.5"
+      ],
+      "summary": "Business-event contract and named account, request, offer, contact, safety, and commercial facts",
+      "related": [
+        "measurement/metrics.md",
+        "measurement/liquidity.md",
+        "workflows/whatsapp-contact.md",
+        "trust/reports-and-moderation.md"
+      ]
+    },
+    {
+      "id": "DOC-20-LIQUIDITY",
+      "path": "measurement/liquidity.md",
+      "title": "20.9 Operational liquidity classification",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "20.9"
+      ],
+      "summary": "Awaiting supply, no-offer gap, low liquidity, healthy, and high competition definitions",
+      "related": [
+        "measurement/metrics.md",
+        "measurement/events.md",
+        "workflows/discovery.md",
+        "product/mvp-scope.md"
+      ]
+    },
+    {
+      "id": "DOC-21",
+      "path": "domain/permissions.md",
+      "title": "21. Permissions by role and resource context",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "21"
+      ],
+      "summary": "Capabilities constrained by actor, ownership, state, relationship, and purpose",
+      "related": [
+        "domain/users.md",
+        "domain/state-transitions.md",
+        "domain/invariants.md",
+        "trust/privacy-and-security.md",
+        "trust/reports-and-moderation.md"
+      ]
+    },
+    {
+      "id": "DOC-22",
+      "path": "quality/edge-cases.md",
+      "title": "22. Edge cases",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "22"
+      ],
+      "summary": "EC-01 through EC-38 and their required behavior",
+      "related": [
+        "domain/state-transitions.md",
+        "domain/invariants.md",
+        "domain/permissions.md",
+        "quality/acceptance-criteria.md"
+      ]
+    },
+    {
+      "id": "DOC-23",
+      "path": "quality/acceptance-criteria.md",
+      "title": "23. Business acceptance criteria",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "23"
+      ],
+      "summary": "AC-01 through AC-50, with mandatory and later commercial scenarios",
+      "related": [
+        "domain/invariants.md",
+        "domain/permissions.md",
+        "quality/edge-cases.md",
+        "product/mvp-scope.md"
+      ]
+    },
+    {
+      "id": "DOC-24",
+      "path": "product/mvp-scope.md",
+      "title": "24. Mandatory MVP",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mvp",
+      "source_sections": [
+        "24"
+      ],
+      "summary": "Mandatory capabilities, delivery gates, and validation boundaries",
+      "related": [
+        "product/overview.md",
+        "product/principles-and-policies.md",
+        "quality/acceptance-criteria.md",
+        "product/roadmap.md",
+        "product/out-of-scope.md",
+        "quality/readiness-checklist.md"
+      ]
+    },
+    {
+      "id": "DOC-25",
+      "path": "product/roadmap.md",
+      "title": "25. Near-term post-MVP and future scope",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "post-mvp",
+      "source_sections": [
+        "25"
+      ],
+      "summary": "Near-term additions and separately scoped future capabilities",
+      "related": [
+        "commercial/radar-pro.md",
+        "commercial/monetization.md",
+        "product/mvp-scope.md",
+        "product/out-of-scope.md"
+      ]
+    },
+    {
+      "id": "DOC-26",
+      "path": "product/out-of-scope.md",
+      "title": "26. Out of MVP scope",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "26"
+      ],
+      "summary": "Explicit MVP exclusions and the business-only documentation mandate",
+      "related": [
+        "product/overview.md",
+        "product/mvp-scope.md",
+        "product/roadmap.md"
+      ]
+    },
+    {
+      "id": "DOC-27",
+      "path": "quality/readiness-checklist.md",
+      "title": "27. Business readiness checklist",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "27.1",
+        "27.2",
+        "27.3",
+        "27.4"
+      ],
+      "summary": "Pre-implementation business, operation, measurement, and commercial gates",
+      "related": [
+        "product/principles-and-policies.md",
+        "domain/invariants.md",
+        "domain/permissions.md",
+        "quality/acceptance-criteria.md",
+        "product/mvp-scope.md",
+        "quality/brief-coverage.md"
+      ]
+    },
+    {
+      "id": "DOC-27-COVERAGE",
+      "path": "quality/brief-coverage.md",
+      "title": "27.5 Source-brief coverage",
+      "kind": "business-specification",
+      "status": "recommended-business-baseline",
+      "scope": "mixed",
+      "source_sections": [
+        "27.5"
+      ],
+      "summary": "Traceability of all 47 source-brief requirements to the 27 specification sections",
+      "related": [
+        "quality/readiness-checklist.md",
+        "BUSINESS_LOGIC_SPECIFICATION.md"
+      ]
+    },
+    {
+      "id": "GUIDE-CURSOR",
+      "path": "../.cursor/rules/project-context.mdc",
+      "title": "Cursor compatibility entry point",
+      "kind": "agent-instructions",
+      "status": "current",
+      "scope": "documentation",
+      "source_sections": [],
+      "summary": "Always-applied signpost to shared repository and documentation instructions",
+      "related": [
+        "../AGENTS.md",
+        "README.md"
+      ]
+    },
+    {
+      "id": "GUIDE-DECISIONS",
+      "path": "decisions/README.md",
+      "title": "Decision records",
+      "kind": "maintenance",
+      "status": "current",
+      "scope": "documentation",
+      "source_sections": [],
+      "summary": "When and how to record new decisions, their status, approval, and consequences",
+      "related": [
+        "product/principles-and-policies.md",
+        "templates/decision-record.md"
+      ]
+    },
+    {
+      "id": "GUIDE-DOCS",
+      "path": "AGENTS.md",
+      "title": "Documentation agent instructions",
+      "kind": "agent-instructions",
+      "status": "current",
+      "scope": "documentation",
+      "source_sections": [],
+      "summary": "Scoped editing rules, metadata, stable references, and verification",
+      "related": [
+        "README.md",
+        "maintenance/agent-workflow.md"
+      ]
+    },
+    {
+      "id": "GUIDE-ROOT",
+      "path": "../AGENTS.md",
+      "title": "Repository agent instructions",
+      "kind": "agent-instructions",
+      "status": "current",
+      "scope": "documentation",
+      "source_sections": [],
+      "summary": "Repository-wide context, working rules, and completion expectations",
+      "related": [
+        "README.md",
+        "maintenance/agent-workflow.md"
+      ]
+    },
+    {
+      "id": "GUIDE-WORKFLOW",
+      "path": "maintenance/agent-workflow.md",
+      "title": "Agent maintenance workflow",
+      "kind": "maintenance",
+      "status": "current",
+      "scope": "documentation",
+      "source_sections": [],
+      "summary": "Discovery, impact analysis, canonical editing, validation, history, and handoff",
+      "related": [
+        "README.md",
+        "decisions/README.md",
+        "maintenance/changelog.md"
+      ]
+    },
+    {
+      "id": "HISTORY-DOCS",
+      "path": "maintenance/changelog.md",
+      "title": "Documentation changelog",
+      "kind": "maintenance",
+      "status": "current",
+      "scope": "documentation",
+      "source_sections": [],
+      "summary": "Significant baseline and organization changes",
+      "related": [
+        "README.md",
+        "maintenance/project-status.md"
+      ]
+    },
+    {
+      "id": "INDEX-DOCS",
+      "path": "README.md",
+      "title": "Documentation index",
+      "kind": "navigation",
+      "status": "current",
+      "scope": "documentation",
+      "source_sections": [],
+      "summary": "Task routes, canonical topic inventory, reading order, and stable references",
+      "related": [
+        "manifest.json",
+        "maintenance/project-status.md",
+        "maintenance/agent-workflow.md"
+      ]
+    },
+    {
+      "id": "INDEX-MANIFEST",
+      "path": "manifest.json",
+      "title": "Document manifest",
+      "kind": "manifest",
+      "status": "current",
+      "scope": "documentation",
+      "source_sections": [],
+      "summary": "Machine-readable identities, paths, scopes, summaries, and relations",
+      "related": [
+        "README.md"
+      ]
+    },
+    {
+      "id": "INDEX-POLICIES",
+      "path": "product/policy-index.md",
+      "title": "Policy index",
+      "kind": "navigation",
+      "status": "current",
+      "scope": "documentation",
+      "source_sections": [],
+      "summary": "Canonical locations of limits, timing windows, thresholds, retention policies, and commercial intervals without copying their values.",
+      "related": [
+        "product/principles-and-policies.md",
+        "maintenance/agent-workflow.md"
+      ]
+    },
+    {
+      "id": "INDEX-PROJECT",
+      "path": "../README.md",
+      "title": "Project overview",
+      "kind": "navigation",
+      "status": "current",
+      "scope": "documentation",
+      "source_sections": [],
+      "summary": "Top-level product promise and project/documentation entry points",
+      "related": [
+        "README.md",
+        "../AGENTS.md"
+      ]
+    },
+    {
+      "id": "INDEX-SPECIFICATION",
+      "path": "BUSINESS_LOGIC_SPECIFICATION.md",
+      "title": "Business Logic Specification index",
+      "kind": "navigation",
+      "status": "current",
+      "scope": "documentation",
+      "source_sections": [],
+      "summary": "Original 27-section order and preserved numbered anchors",
+      "related": [
+        "README.md",
+        "quality/brief-coverage.md"
+      ]
+    },
+    {
+      "id": "STATUS-PROJECT",
+      "path": "maintenance/project-status.md",
+      "title": "Project status",
+      "kind": "maintenance",
+      "status": "current",
+      "scope": "documentation",
+      "source_sections": [],
+      "summary": "Evidence-based available artifacts, implementation status, and later gates",
+      "related": [
+        "README.md",
+        "product/mvp-scope.md",
+        "quality/readiness-checklist.md"
+      ]
+    },
+    {
+      "id": "TEMPLATE-DECISION",
+      "path": "templates/decision-record.md",
+      "title": "Decision record template",
+      "kind": "template",
+      "status": "template",
+      "scope": "documentation",
+      "source_sections": [],
+      "summary": "Reusable decision context, options, rationale, scope, timing, and evidence",
+      "related": [
+        "decisions/README.md"
+      ]
+    },
+    {
+      "id": "TEMPLATE-HANDOFF",
+      "path": "templates/task-handoff.md",
+      "title": "Task handoff template",
+      "kind": "template",
+      "status": "template",
+      "scope": "documentation",
+      "source_sections": [],
+      "summary": "Reusable durable continuation context, actual checks, and next actions",
+      "related": [
+        "maintenance/agent-workflow.md"
+      ]
+    },
+    {
+      "id": "TEMPLATE-TOPIC",
+      "path": "templates/topic-document.md",
+      "title": "Topic document template",
+      "kind": "template",
+      "status": "template",
+      "scope": "documentation",
+      "source_sections": [],
+      "summary": "Reusable structure for a canonical topic and its references",
+      "related": [
+        "maintenance/agent-workflow.md"
+      ]
+    }
+  ]
+}

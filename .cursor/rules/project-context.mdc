@@ -1,0 +1,12 @@
+---
+description: Repository context and canonical documentation for AI-maintained Procuro Aí work
+alwaysApply: true
+---
+
+# Project context
+
+Apply the repository's [agent instructions](../../AGENTS.md) to every task and the [documentation instructions](../../docs/AGENTS.md) when editing documentation.
+
+Start with the [documentation index](../../docs/README.md) and [project status](../../docs/maintenance/project-status.md). Use the [manifest](../../docs/manifest.json) to locate canonical topic files.
+
+Follow the [maintenance workflow](../../docs/maintenance/agent-workflow.md) when changing rules or documentation. These linked documents own the conventions; this rule is a compatibility entry point, not a second copy of the business specification.
