@@ -27,6 +27,8 @@ pub mod application {
     pub mod change_phone;
     /// Effective-time port: production system clock vs frozen test clocks.
     pub mod clock;
+    /// Buyer closure: completion and cancellation as declared outcomes.
+    pub mod close_request;
     /// Exact duplicate demand: normalized same-owner open-need matching.
     pub mod duplicate_intent;
     /// Shared current-account and relationship guards for writers.
