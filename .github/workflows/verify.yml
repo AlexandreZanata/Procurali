@@ -1,0 +1,40 @@
+name: verify
+
+on:
+  push:
+    branches: [codex/backend-mvp]
+  pull_request:
+    branches: [main]
+
+# Least privilege: read the checkout, run checks, report status. No publishing.
+permissions:
+  contents: read
+
+jobs:
+  skeleton:
+    name: Skeleton checks (locked build, fmt, clippy, registered tiers)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@v4
+
+      - name: Confirm no private workspace leaked into the checkout
+        run: |
+          if git ls-files | grep -E '(^|/)\.local(/|$)'; then
+            echo 'private .local path is tracked; refusing to continue' >&2
+            exit 1
+          fi
+          test ! -e .local
+
+      - name: Install the documented stable toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy
+          rustup default stable
+          rustc --version
+          cargo --version
+
+      - name: Run the tracked CI entry point
+        run: ./scripts/ci.sh
+
+      # No artifacts are uploaded: logs are the only output, and they contain
+      # no secrets by construction (redacted settings, typed log fields).

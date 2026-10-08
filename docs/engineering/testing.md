@@ -66,3 +66,14 @@ dispositions and task tiers): 132 scenarios — 47 mandatory AC, 35 mandatory EC
 and the 14 mandatory race cases with their proving tasks. P17-T01 reconciles this
 registry against actually discovered tests and fails the gate if any mandatory ID
 lacks a real assertion.
+
+## Continuous integration
+
+`.github/workflows/verify.yml` runs `./scripts/ci.sh` on pushes to the
+construction branch and pull requests to `main`: pinned `actions/checkout@v4`,
+stable Rust via `rustup` (matching `backend/rust-toolchain.toml`), then locked
+fetch/build, `fmt --check`, `clippy --all-targets -- -D warnings`, the registered
+unit/api/privacy tiers, and the private-path guard. The workflow reads tracked
+files only (it fails if any `.local/` path is tracked or present) and uploads no
+artifacts; logs stay secret-free by construction. Later phases extend `ci.sh`
+with the integration/concurrency tiers and a real PostgreSQL service.
