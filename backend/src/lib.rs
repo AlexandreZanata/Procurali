@@ -27,6 +27,8 @@ pub mod application {
     pub mod change_phone;
     /// Effective-time port: production system clock vs frozen test clocks.
     pub mod clock;
+    /// Shared current-account and relationship guards for writers.
+    pub mod eligibility;
     /// Durable per-action deduplication (same key/body replays, changed body conflicts).
     pub mod idempotency;
     /// Phone-verification provider boundary with a restricted deterministic fake.
@@ -45,6 +47,8 @@ pub mod application {
 
 /// SQLx repositories, migrations, pool, and transaction machinery.
 pub mod persistence {
+    /// Current-account and block-ledger reads for guards.
+    pub mod eligibility;
     /// Durable business events recorded with their mutation.
     pub mod events;
     /// Compile-time migration journal and append-only runner.
