@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "note": "Synthetic matrix only. Actors: anonymous, owner (resource author), stranger (authenticated non-party), seller (offer author), moderator, admin. Guards combine actor, ownership, state, relationship, and purpose; role labels never replace them (INV-05).",
+  "matrix": [
+    {
+      "operation": "GET public request / share landing",
+      "anonymous": "allow (public DTO only, INV-31)",
+      "owner": "allow",
+      "stranger": "allow (public DTO only)",
+      "seller": "allow (public DTO only)",
+      "moderator": "allow (public DTO only)",
+      "refusal": "none; nonexistent id -> 404 without disclosing existence reasons"
+    },
+    {
+      "operation": "POST request draft / publish / revise / renew / close / remove",
+      "owner": "allow when eligible (quotas, deadline, revision rules)",
+      "anonymous": "deny unauthenticated",
+      "stranger": "deny forbidden_owner",
+      "seller": "deny forbidden_owner (no transfer, INV-01)",
+      "moderator": "deny forbidden_owner (staff do not own user resources)",
+      "refusal": "403 forbidden_owner or 409/422 state codes; no other owner's data in the response"
+    },
+    {
+      "operation": "POST offer submit / resubmit / edit / withdraw",
+      "seller": "allow on own single slot per cycle when eligible",
+      "owner": "deny forbidden_role (self-offer refused, no slot created)",
+      "anonymous": "deny unauthenticated",
+      "stranger": "deny forbidden_owner",
+      "refusal": "stranger sees nothing of competing offers (AC-19)"
+    },
+    {
+      "operation": "GET received offers (buyer comparison)",
+      "owner": "allow (all own offers with seller display names)",
+      "seller": "deny: only own offer via seller-scoped read",
+      "anonymous": "deny unauthenticated",
+      "stranger": "deny forbidden_owner",
+      "refusal": "competing prices and buyer phone inaccessible to sellers (INV-30, INV-31, AC-19)"
+    },
+    {
+      "operation": "POST contact handoff",
+      "owner": "allow when author, offer live and current, parties eligible, no block/restriction (INV-27, INV-28)",
+      "anonymous": "deny unauthenticated",
+      "stranger": "deny forbidden_owner regardless of seller or professional status (AC-22)",
+      "seller": "deny forbidden_role (sellers never self-initiate)",
+      "moderator": "deny forbidden_owner",
+      "refusal": "generic refusal; no phone destination; no-store response"
+    },
+    {
+      "operation": "POST outcome / GET notices",
+      "owner": "allow own request outcomes; notices visible only to intended account",
+      "stranger": "deny forbidden_owner",
+      "anonymous": "deny unauthenticated",
+      "refusal": "terminal history preserved; no cross-account disclosure"
+    },
+    {
+      "operation": "POST report / block",
+      "owner": "allow against eligible counterpart/content (own safety actions)",
+      "anonymous": "deny unauthenticated",
+      "refusal": "reporter identity never disclosed to the reported party (INV-31)"
+    },
+    {
+      "operation": "Staff restrict / restore / prohibit-class / appeal review",
+      "moderator": "allow scoped actions only, audited",
+      "admin": "allow scoped actions only, audited",
+      "owner": "deny forbidden_role",
+      "anonymous": "deny unauthenticated",
+      "refusal": "paid status never overrides a restriction; lifting one restriction overrides nothing else (INV-38, AC-43)"
+    }
+  ],
+  "overposting_vectors": [
+    { "input": { "owner_id": "forged-uuid", "role": "admin", "state": "active" }, "expectation": "Ignored. Ownership, role, and state derive server-side (INV-05)." },
+    { "input": { "price": "10.00", "buyer_phone": "+55-11-0000-0000", "internal_flags": {} }, "expectation": "Unknown/forbidden fields rejected or stripped; phone material never accepted from clients." },
+    { "input": { "request_revision": "stale-revision-id" }, "expectation": "Rejected with current requirements (EC-34); no hidden-budget acceptance." },
+    { "input": { "state": "active", "cycle": 99 }, "expectation": "Client-supplied lifecycle ignored; server state authoritative." }
+  ]
+}

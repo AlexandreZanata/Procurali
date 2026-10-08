@@ -1,0 +1,389 @@
+openapi: 3.1.0
+info:
+  title: Procurali MVP API
+  version: 0.0.0-proposed
+  description: >
+    Proposed mandatory-backend inventory. Business meaning lives in docs/;
+    representation rules in contracts/domain-vectors.json; guards in
+    contracts/authorization-cases.json. Contact handoff responses are
+    Cache-Control: no-store and never embedded in offer or public DTOs.
+    No Radar, subscription, pass, payment, chat, or mobile routes exist
+    in the mandatory MVP (AC-45..AC-47 deferred).
+servers:
+  - url: /api/v1
+tags:
+  - name: accounts
+  - name: requests
+  - name: discovery
+  - name: offers
+  - name: contacts
+  - name: outcomes
+  - name: safety
+  - name: staff
+security:
+  - cookieAuth: []
+paths:
+  /health/live:
+    get:
+      summary: Liveness (no auth, no database required)
+      security: []
+      responses:
+        '200': { description: Process alive }
+  /health/ready:
+    get:
+      summary: Readiness (database reachable, migrations current)
+      security: []
+      responses:
+        '200': { description: Ready to serve }
+        '503': { description: Not ready (fail-safe) }
+  /accounts:
+    post:
+      tags: [accounts]
+      summary: Register minimal pending account (AC-02)
+      security: []
+      description: Creates a pending account only. Proof of phone control happens via challenge confirmation.
+      responses:
+        '201': { description: Pending account created (no session) }
+        '400': { description: missing_field/invalid_field/text_too_long/unknown_city }
+        '409': { description: Duplicate phone refused with recovery offer (AC-03) }
+  /accounts/challenges:
+    post:
+      tags: [accounts]
+      summary: Start phone verification challenge
+      security: []
+      description: Rate-limited technical operation, not a marketplace quota. Request alone never proves control.
+      responses:
+        '202': { description: Challenge sent (generic response, no enumeration) }
+        '429': { description: rate_limited }
+  /accounts/challenges/confirmations:
+    post:
+      tags: [accounts]
+      summary: Confirm phone control, activate account, open session
+      security: []
+      responses:
+        '200': { description: Account eligible; session cookie issued }
+        '410': { description: Challenge expired }
+        '422': { description: verification_failed (attempts consumed) }
+  /accounts/me:
+    get:
+      tags: [accounts]
+      summary: Current account (owner only)
+      responses:
+        '200': { description: Private account DTO }
+        '401': { description: unauthenticated }
+    patch:
+      tags: [accounts]
+      summary: Edit profile/locality (owner only; phone excluded, EC-22)
+      responses:
+        '200': { description: Updated account DTO }
+        '403': { description: forbidden_owner }
+  /accounts/phone-changes:
+    post:
+      tags: [accounts]
+      summary: Start proof-gated phone change (control + new-number confirmation)
+      responses:
+        '202': { description: Change pending confirmation }
+        '409': { description: Duplicate phone refused (AC-03) }
+  /accounts/recoveries:
+    post:
+      tags: [accounts]
+      summary: Recover controlled account (never exposes previous owner history)
+      security: []
+      responses:
+        '202': { description: Generic recovery response (no enumeration) }
+  /sessions/current:
+    delete:
+      tags: [accounts]
+      summary: Log out current session
+      responses:
+        '204': { description: Session revoked }
+        '401': { description: unauthenticated }
+  /catalogs/cities:
+    get:
+      tags: [discovery]
+      summary: Supported cities/regions (public reference data)
+      security: []
+      responses:
+        '200': { description: City catalog }
+  /catalogs/categories:
+    get:
+      tags: [discovery]
+      summary: Allowed physical categories (public reference data)
+      security: []
+      responses:
+        '200': { description: Category catalog }
+  /requests:
+    post:
+      tags: [requests]
+      summary: Create private request draft (owner-only)
+      description: Validates fields exactly (AC-05); creates no publication event.
+      responses:
+        '201': { description: Draft created }
+        '401': { description: unauthenticated }
+        '422': { description: missing_field/invalid_field/overprecision/nonpositive_amount }
+    get:
+      tags: [requests]
+      summary: List own requests with allowed actions
+      responses:
+        '200': { description: Owner request list (cursor paginated) }
+        '401': { description: unauthenticated }
+  /requests/{id}/publication:
+    post:
+      tags: [requests]
+      summary: Publish one valid draft into a seven-day first cycle (AC-04)
+      description: Consumes one open slot and one activation; duplicate intent refused (AC-07).
+      responses:
+        '200': { description: Active first cycle }
+        '409': { description: quota_exceeded/duplicate_intent }
+  /requests/{id}:
+    get:
+      tags: [requests]
+      summary: Owner request read with current eligibility and allowed actions
+      responses:
+        '200': { description: Owner request DTO }
+        '403': { description: forbidden_owner }
+        '404': { description: Not found }
+    patch:
+      tags: [requests]
+      summary: Revise draft or active request (material classification preserved)
+      responses:
+        '200': { description: Revised request; live offers retired when material (AC-09) }
+        '409': { description: conflict_revision/quota_exceeded }
+  /requests/{id}/renewal:
+    post:
+      tags: [requests]
+      summary: Explicit renewal into a fresh cycle (AC-11)
+      responses:
+        '200': { description: New cycle; prior offers stay expired }
+        '409': { description: quota_exceeded/forbidden_state }
+  /requests/{id}/closure:
+    post:
+      tags: [requests]
+      summary: Buyer completion or cancellation with attribution (AC-28..AC-31)
+      responses:
+        '200': { description: Terminal outcome recorded; no inferred transaction }
+        '409': { description: forbidden_state }
+  /requests/{id}/removal:
+    post:
+      tags: [requests]
+      summary: Owner removal (hides content, preserves terminal/safety history)
+      responses:
+        '200': { description: Removed }
+  /requests/{id}/offers:
+    get:
+      tags: [requests]
+      summary: Private received-offer comparison (buyer only, AC-19)
+      responses:
+        '200': { description: All own offers for the request }
+        '403': { description: forbidden_owner }
+  /discovery/requests:
+    get:
+      tags: [discovery]
+      summary: Deterministic local discovery (public, AC-13)
+      security: []
+      description: Eligible matching requests only; region preference then original recency. Never exposes phones or private offers.
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200': { description: Public request page (cursor paginated) }
+  /offers:
+    post:
+      tags: [offers]
+      summary: Guarded offer submission (AC-14)
+      description: Carries the request revision composed against; stale revisions rejected (EC-34). One slot per seller per cycle; daily allowance enforced.
+      responses:
+        '201': { description: Sent offer (seller-scoped DTO) }
+        '403': { description: Self-offer refused (no slot created) }
+        '409': { description: quota_exceeded/conflict_revision/forbidden_state }
+  /offers/{id}:
+    get:
+      tags: [offers]
+      summary: Seller-scoped own-offer read (never competing offers, AC-19)
+      responses:
+        '200': { description: Own offer DTO }
+        '403': { description: forbidden_owner }
+    patch:
+      tags: [offers]
+      summary: Live terms editing (new revision, history kept, AC-20)
+      responses:
+        '200': { description: Updated terms revision }
+        '409': { description: forbidden_state/conflict_revision }
+  /offers/{id}/views:
+    post:
+      tags: [offers]
+      summary: Record first buyer view (once; repeats do not inflate)
+      responses:
+        '200': { description: Viewed state (first view recorded once) }
+        '403': { description: forbidden_owner }
+  /offers/{id}/decline:
+    post:
+      tags: [offers]
+      summary: Buyer decline as comparison choice (not misconduct)
+      responses:
+        '200': { description: Declined }
+        '403': { description: forbidden_owner }
+  /offers/{id}/withdrawal:
+    post:
+      tags: [offers]
+      summary: Seller withdrawal (stops future interaction, preserves history)
+      responses:
+        '200': { description: Withdrawn; no slot or allowance refund }
+        '403': { description: forbidden_owner }
+  /contacts:
+    post:
+      tags: [contacts]
+      summary: Buyer-initiated WhatsApp handoff (INV-27/INV-28, AC-21)
+      description: >
+        Only the current request author on a live offer with eligible parties.
+        Response is Cache-Control: no-store and records a measurable initiation,
+        not proof of WhatsApp delivery. Replays revalidate eligibility (AC-22/AC-25).
+      responses:
+        '200': { description: Handoff context (no-store) or existing contact on eligible replay }
+        '403': { description: Refused; no destination disclosed }
+        '404': { description: Not found }
+  /outcomes:
+    post:
+      tags: [outcomes]
+      summary: Record buyer outcome with optional contacted-offer attribution
+      responses:
+        '200': { description: Outcome recorded (idempotent under key) }
+        '409': { description: idempotency_key_reuse/forbidden_state }
+  /notices:
+    get:
+      tags: [outcomes]
+      summary: Intended-account notices (private)
+      responses:
+        '200': { description: Notice list (cursor paginated) }
+        '401': { description: unauthenticated }
+  /notices/{id}/acknowledgment:
+    post:
+      tags: [outcomes]
+      summary: Acknowledge own notice
+      responses:
+        '200': { description: Acknowledged }
+        '403': { description: forbidden_owner }
+  /blocks:
+    post:
+      tags: [safety]
+      summary: Block a counterpart (stops new handoffs, invalidates live pair offers)
+      responses:
+        '201': { description: Block created }
+        '401': { description: unauthenticated }
+  /blocks/{id}:
+    delete:
+      tags: [safety]
+      summary: Unblock (removes only the relationship restriction; old offers stay unavailable)
+      responses:
+        '204': { description: Block removed }
+  /reports:
+    post:
+      tags: [safety]
+      summary: Report content or account (reporter identity never disclosed, INV-31)
+      responses:
+        '201': { description: Report received }
+        '401': { description: unauthenticated }
+  /feedback:
+    post:
+      tags: [outcomes]
+      summary: Optional structured operational feedback (factual, no composite score)
+      responses:
+        '201': { description: Feedback recorded }
+  /profiles/professional:
+    put:
+      tags: [accounts]
+      summary: Declared professional classification (free, independent of verification/payment, AC-44)
+      responses:
+        '200': { description: Professional profile stored }
+        '401': { description: unauthenticated }
+  /staff/reports:
+    get:
+      tags: [staff]
+      summary: Moderation report queue (granted staff, audited)
+      responses:
+        '200': { description: Queue page }
+        '403': { description: forbidden_role }
+  /staff/restrictions:
+    post:
+      tags: [staff]
+      summary: Restrict account or content with documented reason (granted staff, audited)
+      responses:
+        '200': { description: Restriction applied }
+        '403': { description: forbidden_role }
+  /staff/restorations:
+    post:
+      tags: [staff]
+      summary: Restore after review (single restriction only; INV-38)
+      responses:
+        '200': { description: Restriction lifted (others stay effective) }
+        '403': { description: forbidden_role }
+  /staff/policy-classes:
+    post:
+      tags: [staff]
+      summary: Approve a new prohibited class (AC-43; paid status no exception)
+      responses:
+        '200': { description: Class effective prospectively }
+        '403': { description: forbidden_role }
+  /staff/appeals:
+    get:
+      tags: [staff]
+      summary: Appeal review queue (granted staff, audited)
+      responses:
+        '200': { description: Appeal queue page }
+        '403': { description: forbidden_role }
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: procurali_session
+      description: Opaque digest-stored session; Secure/HTTP-only/SameSite in production.
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+      description: Opaque cursor; no offset paging.
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, description: Stable code from contracts/domain-vectors.json }
+        message: { type: string, description: Human-readable; never a secret or phone number }
+        fields: { type: object, additionalProperties: { type: string }, description: Field name to error code }
+    Page:
+      type: object
+      required: [items, next_cursor]
+      properties:
+        items: { type: array, items: { type: object } }
+        next_cursor: { type: [string, 'null'], description: Opaque cursor or null at the end }
+    PublicRequest:
+      type: object
+      description: Allowlist for anonymous/visitor reads (INV-31). No phone, address, offers, or prices of others.
+      required: [id, title, budget, condition, category, city, region_label, published_at, deadline, cycle, revision]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, maxLength: 120 }
+        budget: { type: string, pattern: '^[0-9]+(\.[0-9]{1,2})?$' }
+        condition: { type: string, enum: [new, used] }
+        category: { type: string }
+        city: { type: string }
+        region_label: { type: string }
+        published_at: { type: string, format: date-time }
+        deadline: { type: string, format: date-time }
+        cycle: { type: integer, minimum: 1 }
+        revision: { type: string, format: uuid }
+    ContactHandoff:
+      type: object
+      description: No-store handoff response. Records a measurable initiation, not delivery proof.
+      required: [contact_id, destination_hint, message_context, repeat]
+      properties:
+        contact_id: { type: string, format: uuid }
+        destination_hint: { type: string, description: Usable destination only when currently eligible }
+        message_context: { type: string, description: Contextual starter referencing current terms }
+        repeat: { type: boolean, description: True for an eligible replay of an existing contact }
