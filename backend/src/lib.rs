@@ -35,6 +35,8 @@ pub mod application {
     pub mod eligibility;
     /// Durable per-action deduplication (same key/body replays, changed body conflicts).
     pub mod idempotency;
+    /// Offer submission quotas: daily allowance and slot permanence.
+    pub mod offer_limits;
     /// Phone-verification provider boundary with a restricted deterministic fake.
     pub mod phone_verification;
     /// Declared professional classification, free and separate.
