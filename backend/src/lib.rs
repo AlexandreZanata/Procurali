@@ -39,6 +39,8 @@ pub mod persistence {
     pub mod pool;
     /// Bounded serializable transaction retry (DEC-0003 machinery).
     pub mod transaction;
+    /// Account identity: users, credential digests, challenges, blocks ledger.
+    pub mod users;
 }
 
 /// Axum router, handlers, DTO allowlists, and structured errors.
