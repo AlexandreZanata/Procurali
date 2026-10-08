@@ -31,6 +31,8 @@ pub mod application {
     pub mod close_request;
     /// Exact duplicate demand: normalized same-owner open-need matching.
     pub mod duplicate_intent;
+    /// Live terms editing: new revisions with preserved engagement.
+    pub mod edit_offer;
     /// Shared current-account and relationship guards for writers.
     pub mod eligibility;
     /// Durable per-action deduplication (same key/body replays, changed body conflicts).
