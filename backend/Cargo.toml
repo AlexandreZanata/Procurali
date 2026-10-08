@@ -1,0 +1,37 @@
+[package]
+name = "procurali-backend"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89"
+description = "Procurali free-MVP backend: request/offer/contact/outcome loop with safe operation."
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "procurali_backend"
+path = "src/lib.rs"
+
+[[bin]]
+name = "procurali-backend"
+path = "src/main.rs"
+
+[dependencies]
+# HTTP + runtime (skeleton serves health in P01-T04; full routes from P04 onward).
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "time", "net", "sync"] }
+tower = { version = "0.5", features = ["util", "timeout", "limit"] }
+tower-http = { version = "0.7", features = ["trace", "limit", "cors", "set-header", "request-id"] }
+# Persistence authority (real PostgreSQL; migrations and repositories from P02 onward).
+sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "migrate", "uuid", "chrono", "tls-rustls"] }
+# Explicit DTOs and domain values (money/time/text parsers from P03 onward).
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v7", "serde"] }
+chrono = { version = "0.4", features = ["serde", "clock"] }
+# Structured errors, redacted observability, validated configuration (P01-T02/T03).
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+config = "0.15"
+# Opaque session digests and random tokens (identity work from P04 onward; no home-grown crypto).
+argon2 = "0.6"
+rand = "0.10"
