@@ -61,6 +61,8 @@ pub mod persistence {
     pub mod phone_history;
     /// Bounded pools, redacted handling, and liveness probes.
     pub mod pool;
+    /// Request ownership, requirement revisions, and activation cycles.
+    pub mod requests;
     /// Bounded serializable transaction retry (DEC-0003 machinery).
     pub mod transaction;
     /// Account identity: users, credential digests, challenges, blocks ledger.
