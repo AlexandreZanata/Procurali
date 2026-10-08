@@ -130,6 +130,13 @@
   ],
   "registration": {
     "note": "Suites actually wired into scripts/test.sh. Later cards extend tiers/tasks here; unregistered tiers exit nonzero.",
+    "support": {
+      "consumption": "test files declare #[path = \"support/<module>.rs\"] (no support/mod.rs needed); proven by the transient P02-T05 proof",
+      "modules": [
+        "backend/tests/support/database.rs",
+        "backend/tests/support/fixtures.rs"
+      ]
+    },
     "tasks": {
       "P01-T01": {
         "targets": [
@@ -191,12 +198,55 @@
           "unit",
           "api"
         ]
+      },
+      "P02-T03": {
+        "targets": [
+          "postgres_core"
+        ],
+        "tests": [
+          "generated_ids_are_version_7_from_postgresql",
+          "second_migration_run_changes_nothing",
+          "failing_migration_leaves_no_partial_version"
+        ],
+        "tiers": [
+          "integration"
+        ]
+      },
+      "P02-T04": {
+        "targets": [
+          "postgres_core"
+        ],
+        "tests": [
+          "new_connection_reads_persisted_foundation_data",
+          "unavailable_db_fails_readiness_and_connect",
+          "refusals_carry_no_secrets",
+          "exhausted_pool_is_bounded",
+          "slow_query_is_bounded_by_statement_timeout"
+        ],
+        "tiers": [
+          "integration"
+        ]
+      },
+      "P02-T05": {
+        "note": "support builders proven by transient named tests (deleted after proof); permanent consumers land in later cards test files via #[path] support modules",
+        "targets": [
+          "postgres_core"
+        ],
+        "tests": [],
+        "tiers": [
+          "integration"
+        ]
       }
     },
     "tiers": {
       "api": {
         "targets": [
           "api_scaffold"
+        ]
+      },
+      "integration": {
+        "targets": [
+          "postgres_core"
         ]
       },
       "privacy": {
