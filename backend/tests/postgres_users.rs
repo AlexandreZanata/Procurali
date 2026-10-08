@@ -429,6 +429,32 @@ async fn identity_tables_hold_no_private_plaintext() {
             .expect("block lookup queries"),
         "empty ledger relates nothing"
     );
+    // A recorded direction reads back exactly (decodes a present row).
+    let other = create_user(
+        &mut tx,
+        probe_user("Block Other", "+5511944444444"),
+        test_keys(),
+    )
+    .await
+    .expect("second user registers");
+    sqlx::query("INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)")
+        .bind(user.id)
+        .bind(other.id)
+        .execute(&mut *tx)
+        .await
+        .expect("block records");
+    assert!(
+        blocks_relation_exists(&mut *tx, user.id, other.id)
+            .await
+            .expect("block lookup queries"),
+        "recorded direction reads back"
+    );
+    assert!(
+        !blocks_relation_exists(&mut *tx, other.id, user.id)
+            .await
+            .expect("block lookup queries"),
+        "reverse direction stays absent"
+    );
     tx.rollback().await.expect("suite continues");
     // Error values render nothing sensitive by construction (static reasons).
     let rendered = format!(

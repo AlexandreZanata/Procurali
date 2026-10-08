@@ -627,7 +627,7 @@ pub async fn blocks_relation_exists<'e, E>(
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
-    let found: Option<i64> =
+    let found: Option<i32> =
         sqlx::query_scalar("SELECT 1 FROM user_blocks WHERE blocker_id = $1 AND blocked_id = $2")
             .bind(blocker_id)
             .bind(blocked_id)
