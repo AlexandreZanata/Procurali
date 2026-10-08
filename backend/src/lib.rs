@@ -15,12 +15,19 @@ pub mod application {}
 pub mod persistence {}
 
 /// Axum router, handlers, DTO allowlists, and structured errors.
-pub mod http {}
+pub mod http {
+    /// Liveness/readiness probes over dependency flags (no values in output).
+    pub mod health;
+    /// Router with explicit size/time bounds and stable errors.
+    pub mod router;
+}
 
 /// Validated configuration, redacted logging, lifecycle, and workers.
 pub mod operations {
     /// Validated runtime configuration (no default secrets, redacted output).
     pub mod config;
+    /// Graceful server lifecycle (drain on shutdown).
+    pub mod lifecycle;
     /// Redacted structured observability (typed fields only, no secret channels).
     pub mod telemetry;
 }
