@@ -29,6 +29,8 @@ pub mod application {
     pub mod phone_verification;
     /// Minimal registration and phone-proof activation flows.
     pub mod register_user;
+    /// Session lifecycle: login after proof and current-state authentication.
+    pub mod sessions;
 }
 
 /// SQLx repositories, migrations, pool, and transaction machinery.
@@ -51,6 +53,8 @@ pub mod persistence {
 pub mod http {
     /// Registration, challenge, and confirmation routes (pending to active).
     pub mod accounts;
+    /// Session routes: login, current account, and logout with CSRF contract.
+    pub mod auth;
     /// Response allowlists and strict request bodies.
     pub mod dto;
     /// Structured errors: closed codes, exact statuses, secret-free messages.
