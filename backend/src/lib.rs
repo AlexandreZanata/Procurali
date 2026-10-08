@@ -39,6 +39,8 @@ pub mod application {
     pub mod recovery;
     /// Minimal registration and phone-proof activation flows.
     pub mod register_user;
+    /// Private request draft creation and editing for the owning author.
+    pub mod request_drafts;
     /// Session lifecycle: login after proof and current-state authentication.
     pub mod sessions;
     /// Owner profile editing: display name and default locality.
@@ -85,6 +87,8 @@ pub mod http {
     pub mod health;
     /// Professional-profile routes: free declaration and withdrawal.
     pub mod profiles;
+    /// Request-draft routes: owner-only creation, reads, and edits.
+    pub mod requests;
     /// Router with explicit size/time bounds and stable errors.
     pub mod router;
 }
