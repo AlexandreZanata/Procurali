@@ -45,6 +45,8 @@ pub mod application {
     pub mod register_user;
     /// Private request draft creation and editing for the owning author.
     pub mod request_drafts;
+    /// Effective expiry: deadline eligibility and conditional expiration.
+    pub mod request_eligibility;
     /// Request activation quotas: open slots and rolling successful counts.
     pub mod request_limits;
     /// Owner request reads: bounded lists and details with truthful actions.
