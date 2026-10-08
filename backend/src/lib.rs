@@ -9,10 +9,15 @@
 pub mod domain {
     /// Exact BRL money: integer cents inside, decimal strings on the wire.
     pub mod money;
+    /// UTC instants, exclusive deadlines, rolling windows. No clock reads.
+    pub mod time;
 }
 
 /// Business operations owning eligibility and transaction boundaries.
-pub mod application {}
+pub mod application {
+    /// Effective-time port: production system clock vs frozen test clocks.
+    pub mod clock;
+}
 
 /// SQLx repositories, migrations, pool, and transaction machinery.
 pub mod persistence {
