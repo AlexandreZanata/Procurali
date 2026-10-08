@@ -11,10 +11,14 @@
 //! reveals no other owner's history (AC-03). `PATCH /api/v1/accounts/me`
 //! lets the session owner update display name and default locality (200;
 //! strangers answer 401, phone-shaped text answers 400): the user row only,
-//! never resource snapshots (INV-16, AC-41, EC-17). Sessions and cookies
-//! arrive with the session lifecycle card; merging these routes into the
-//! production router (with its body/timeout bounds) lands with the card that
-//! owns the merge.
+//! never resource snapshots (INV-16, AC-41, EC-17). Recovery runs behind
+//! `POST /api/v1/accounts/recoveries` (always one generic 202) and `POST
+//! /api/v1/accounts/recoveries/confirmations` (200 with a fresh session for
+//! verified owners, 202 review-pending for verified recycled numbers, 410 for
+//! elapsed windows, 422 otherwise): no history ever crosses owners (EC-22).
+//! Sessions and cookies arrive with the session lifecycle card; merging these
+//! routes into the production router (with its body/timeout bounds) lands with
+//! the card that owns the merge.
 //!
 //! Bodies are strict (`deny_unknown_fields`): protected or unrelated fields
 //! (CPF, documents, photos, birth dates, addresses, roles, states) are refused
@@ -33,12 +37,15 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use super::errors::{ApiError, Code};
+use crate::application::auth_limits::AbuseLimits;
 use crate::application::phone_verification::VerificationProvider;
+use crate::application::recovery::{confirm_recovery, request_recovery, RECOVERY_WINDOW};
 use crate::application::register_user::{
     confirm_challenge, register_account, start_challenge, ChallengeDispatch, ConfirmationOutcome,
     RegistrationError, CHALLENGE_WINDOW,
 };
 use crate::application::sessions::authenticate;
+use crate::application::sessions::SESSION_IDLE_WINDOW;
 use crate::application::update_profile::{update_profile, ProfileError, ProfileUpdate};
 use crate::persistence::users::{NewUser, PhoneKeys};
 
@@ -93,6 +100,14 @@ where
         .route("/api/v1/accounts/challenges", post(request_challenge))
         .route("/api/v1/accounts/challenges/confirmations", post(confirm))
         .route("/api/v1/accounts/me", patch(update_me))
+        .route(
+            "/api/v1/accounts/recoveries",
+            post(request_account_recovery),
+        )
+        .route(
+            "/api/v1/accounts/recoveries/confirmations",
+            post(confirm_account_recovery),
+        )
         .with_state(state)
 }
 
@@ -416,5 +431,157 @@ where
             ApiError::new(Code::Unauthenticated, "no usable session").into_response()
         }
         Err(ProfileError::StorageFailed) => ApiError::internal().into_response(),
+    }
+}
+
+/// Recovery request body: the destination only.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RecoveryBody {
+    phone: String,
+}
+
+/// Recovery confirmation body: the destination plus the submitted code.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RecoveryConfirmBody {
+    phone: String,
+    code: String,
+}
+
+/// Generic recovery response: identical whether or not anything was sent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct RecoveryResponse {
+    status: &'static str,
+}
+
+/// Recovery confirmation receipt for restored access.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct RecoveryConfirmResponse {
+    account_state: &'static str,
+}
+
+/// Render one recovery `Set-Cookie` value with the login cookie semantics
+/// (`HttpOnly`, `SameSite=Lax`, `Path=/`, idle `Max-Age`). `Secure` follows
+/// the loopback rule: loopback hosts omit it (mirroring test doubles), every
+/// other host sets it — production refuses non-https origins at startup, so
+/// non-loopback always means encrypted transport. Unifying both issuers
+/// behind one builder lands with the production merge.
+fn recovery_cookie(token: &str, headers: &HeaderMap) -> String {
+    let host = headers
+        .get(axum::http::header::HOST)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("");
+    let loopback = host.starts_with("127.0.0.1") || host.starts_with("localhost");
+    format!(
+        "session={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={}{}",
+        SESSION_IDLE_WINDOW.as_secs(),
+        if loopback { "" } else { "; Secure" }
+    )
+}
+
+/// Request account recovery behind one generic response.
+async fn request_account_recovery<S>(
+    State(state): State<AccountsState<S>>,
+    body: Bytes,
+) -> Result<impl IntoResponse, ApiError>
+where
+    S: VerificationProvider + Send + Sync,
+{
+    use crate::application::recovery::RecoveryRequestError;
+    use crate::application::recovery::RecoveryRequestOutcome;
+    let input: RecoveryBody = parse_body(&body)?;
+    match request_recovery(
+        &state.pool,
+        &*state.provider,
+        &input.phone,
+        PhoneKeys {
+            lookup_key: &state.lookup_key,
+            encryption_key: &state.encryption_key,
+        },
+        RECOVERY_WINDOW,
+        AbuseLimits::DEFAULT,
+    )
+    .await
+    {
+        Ok(RecoveryRequestOutcome::Requested) => Ok((
+            StatusCode::ACCEPTED,
+            Json(RecoveryResponse {
+                status: "recovery_requested",
+            }),
+        )),
+        Ok(RecoveryRequestOutcome::ProviderLimited) => {
+            Err(ApiError::new(Code::RateLimited, "challenge rate limited"))
+        }
+        Err(RecoveryRequestError::InvalidInput) => Err(ApiError::new(
+            Code::InvalidField,
+            "recovery fields are invalid",
+        )),
+        Err(RecoveryRequestError::ProviderFailed) => Err(ApiError::unavailable()),
+        Err(RecoveryRequestError::StorageFailed) => Err(ApiError::internal()),
+    }
+}
+
+/// Confirm recovery: fresh session for verified owners, review-pending for
+/// verified recycled numbers, generic refusals otherwise.
+async fn confirm_account_recovery<S>(
+    State(state): State<AccountsState<S>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response
+where
+    S: VerificationProvider + Send + Sync,
+{
+    use crate::application::recovery::{RecoveryError, RecoveryOutcome};
+    let input: RecoveryConfirmBody = match parse_body(&body) {
+        Ok(input) => input,
+        Err(error) => return error.into_response(),
+    };
+    match confirm_recovery(
+        &state.pool,
+        &*state.provider,
+        &input.phone,
+        &input.code,
+        PhoneKeys {
+            lookup_key: &state.lookup_key,
+            encryption_key: &state.encryption_key,
+        },
+    )
+    .await
+    {
+        Ok(RecoveryOutcome::Recovered { token, .. }) => {
+            let cookie = recovery_cookie(&token, &headers);
+            (
+                StatusCode::OK,
+                [(axum::http::header::SET_COOKIE, cookie)],
+                Json(RecoveryConfirmResponse {
+                    account_state: "active",
+                }),
+            )
+                .into_response()
+        }
+        Ok(RecoveryOutcome::UnderReview) => (
+            StatusCode::ACCEPTED,
+            Json(RecoveryResponse {
+                status: "review_pending",
+            }),
+        )
+            .into_response(),
+        Ok(RecoveryOutcome::Failed) => {
+            ApiError::new(Code::VerificationFailed, "account recovery failed").into_response()
+        }
+        Ok(RecoveryOutcome::Expired) => (
+            StatusCode::GONE,
+            Json(ApiError::new(Code::Expired, "challenge expired")),
+        )
+            .into_response(),
+        Ok(RecoveryOutcome::RateLimited) => {
+            ApiError::new(Code::RateLimited, "challenge rate limited").into_response()
+        }
+        Err(RecoveryError::InvalidInput) => {
+            ApiError::new(Code::InvalidField, "recovery fields are invalid").into_response()
+        }
+        Err(RecoveryError::ProviderFailed) => ApiError::unavailable().into_response(),
+        Err(RecoveryError::StorageFailed) => ApiError::internal().into_response(),
     }
 }

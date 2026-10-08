@@ -31,6 +31,8 @@ pub mod application {
     pub mod idempotency;
     /// Phone-verification provider boundary with a restricted deterministic fake.
     pub mod phone_verification;
+    /// Account recovery and recycled-number review boundary.
+    pub mod recovery;
     /// Minimal registration and phone-proof activation flows.
     pub mod register_user;
     /// Session lifecycle: login after proof and current-state authentication.
