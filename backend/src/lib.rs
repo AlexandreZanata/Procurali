@@ -6,7 +6,10 @@
 //! domain/application/persistence operations).
 
 /// Pure value types and rules (money, clock, text, locality). No I/O.
-pub mod domain {}
+pub mod domain {
+    /// Exact BRL money: integer cents inside, decimal strings on the wire.
+    pub mod money;
+}
 
 /// Business operations owning eligibility and transaction boundaries.
 pub mod application {}
