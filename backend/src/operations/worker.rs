@@ -80,11 +80,15 @@ fn contains_phone_shaped_digits(value: &str) -> bool {
 }
 
 /// True when no payload string carries a phone-shaped run and no object key
-/// names a secret.
+/// names a secret. Values shaped exactly as identifiers (UUIDs, the system's
+/// only id shape — phone destinations never parse as one) are exempt, so
+/// digit-heavy ids never trip the phone rule while free text still does.
 fn payload_redacted(payload: &Value) -> bool {
     match payload {
         Value::Null | Value::Bool(_) | Value::Number(_) => true,
-        Value::String(text) => !contains_phone_shaped_digits(text),
+        Value::String(text) => {
+            uuid::Uuid::parse_str(text.trim()).is_ok() || !contains_phone_shaped_digits(text)
+        }
         Value::Array(items) => items.iter().all(payload_redacted),
         Value::Object(fields) => fields.iter().all(|(key, value)| {
             !FORBIDDEN_PAYLOAD_KEYS.contains(&key.as_str()) && payload_redacted(value)
@@ -447,6 +451,10 @@ mod tests {
     fn redaction_refuses_secrets_and_phone_shapes() {
         assert!(payload_redacted(
             &json!({"request_id": "01a11c", "cycle": 1})
+        ));
+        // A digit-heavy identifier parses as a UUID, so it stays exempt.
+        assert!(payload_redacted(
+            &json!({"request_id": "12345678-1234-1234-1234-123456789012"})
         ));
         assert!(payload_redacted(&json!({"items": [{"code": "abc"}]})));
         assert!(!payload_redacted(&json!({"phone": "+5511987654321"})));

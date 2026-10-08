@@ -109,6 +109,8 @@ pub mod http {
 pub mod operations {
     /// Validated runtime configuration (no default secrets, redacted output).
     pub mod config;
+    /// Request lifecycle background jobs: expiry sweeps and owner notices.
+    pub mod jobs;
     /// Graceful server lifecycle (drain on shutdown).
     pub mod lifecycle;
     /// Redacted structured observability (typed fields only, no secret channels).
