@@ -35,6 +35,8 @@ pub mod application {
     pub mod phone_verification;
     /// Declared professional classification, free and separate.
     pub mod professional_profile;
+    /// Complete publication validation: drafts become seven-day active cycles.
+    pub mod publish_request;
     /// Account recovery and recycled-number review boundary.
     pub mod recovery;
     /// Minimal registration and phone-proof activation flows.

@@ -18,10 +18,13 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use database::TestDatabase;
 use procurali_backend::application::phone_verification::FakeVerifyProvider;
+use procurali_backend::application::publish_request::{publish_request, PublishError};
 use procurali_backend::http::accounts::{routes as account_routes, AccountsState};
 use procurali_backend::http::auth::{routes as auth_routes, AuthState};
 use procurali_backend::http::requests::{routes as request_routes, RequestsState};
-use procurali_backend::persistence::catalogs::{upsert_city, upsert_region};
+use procurali_backend::persistence::catalogs::{
+    set_category_status, upsert_city, upsert_region, CategoryStatus,
+};
 use procurali_backend::persistence::requests::{
     cycles_for_request, request as read_request, requests_for_author, revisions_for_request,
 };
@@ -634,6 +637,290 @@ async fn draft_save_creates_no_publication_fact_or_allowance() {
         table_count(db.pool(), "business_events").await,
         provisioned_events,
         "refusals record no business fact"
+    );
+    db.cleanup().await.expect("suite cleans up");
+}
+
+/// Publication facts recorded for one request: kinds in row order.
+async fn published_facts(
+    pool: &sqlx::PgPool,
+    request_id: uuid::Uuid,
+) -> Vec<(String, Option<i32>)> {
+    sqlx::query_as(
+        "SELECT kind, cycle FROM business_events
+         WHERE resource_kind = 'request' AND resource_id = $1
+         ORDER BY occurred_at, id",
+    )
+    .bind(request_id)
+    .fetch_all(pool)
+    .await
+    .expect("events read")
+}
+
+/// Create one draft through the real draft route; return its id.
+async fn create_draft(app: &axum::Router, cookie: &str) -> uuid::Uuid {
+    let (status, created) = call(
+        app.clone(),
+        "POST",
+        "/api/v1/requests/drafts",
+        Some(draft_body()),
+        Some(cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    created["id"]
+        .as_str()
+        .expect("receipt carries id")
+        .parse()
+        .expect("receipt id parses")
+}
+
+#[tokio::test]
+async fn valid_minimal_request_becomes_active_with_seven_day_deadline() {
+    let db = TestDatabase::create("p05t04_publish")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p05t04_publish_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let app = test_app(&db);
+    let owner = provision_active(&app, "+55 11 90000-0011", "Publish Owner").await;
+    let cookie = login_cookie(app.clone(), "+55 11 90000-0011").await;
+    let id = create_draft(&app, &cookie).await;
+
+    let published = publish_request(db.pool(), owner, id)
+        .await
+        .expect("valid draft publishes");
+    assert_eq!(published.id, id);
+    assert_eq!(published.state, "active");
+    assert_eq!(published.cycle_number, 1);
+    assert_eq!(published.revision_number, 1);
+    assert_eq!(published.budget, "520.00");
+    assert_eq!(
+        published
+            .deadline
+            .signed_duration_since(published.original_published_at),
+        chrono::Duration::days(7),
+        "the exclusive deadline is exactly seven days out"
+    );
+
+    // Stored truth matches: active and public with one cycle, one revision,
+    // the original publication time, and exactly one publication fact.
+    let stored = read_request(db.pool(), id)
+        .await
+        .expect("request reads")
+        .expect("request reads");
+    assert_eq!(stored.author_id, owner);
+    assert_eq!(stored.state, "active");
+    assert_eq!(stored.current_cycle_number, 1);
+    assert_eq!(stored.current_revision_number, 1);
+    assert_eq!(
+        stored.original_published_at,
+        Some(published.original_published_at)
+    );
+    let cycles = cycles_for_request(db.pool(), id)
+        .await
+        .expect("cycles read");
+    assert_eq!(cycles.len(), 1);
+    assert_eq!(cycles[0].deadline, published.deadline);
+    let revisions = revisions_for_request(db.pool(), id)
+        .await
+        .expect("revisions read");
+    assert_eq!(revisions.len(), 1);
+    assert_eq!(revisions[0].title, "Refrigerator");
+    assert_eq!(revisions[0].budget_cents, 52_000);
+    assert_eq!(
+        published_facts(db.pool(), id).await,
+        [("request.published".to_owned(), Some(1))]
+    );
+
+    // The row moved past drafting: the draft endpoint no longer serves it.
+    let (status, body) = call(
+        app.clone(),
+        "GET",
+        &format!("/api/v1/requests/drafts/{id}"),
+        None,
+        Some(&cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["code"], "not_found");
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn each_invalid_requirement_is_refused_without_event() {
+    let db = TestDatabase::create("p05t04_refusals")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p05t04_refusals_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let app = test_app(&db);
+    let owner = provision_active(&app, "+55 11 90000-0012", "Refusal Owner").await;
+    let cookie = login_cookie(app.clone(), "+55 11 90000-0012").await;
+
+    async fn set_status(pool: &sqlx::PgPool, status: CategoryStatus) {
+        let mut tx = pool.begin().await.expect("transaction begins");
+        assert!(set_category_status(&mut tx, "home_appliances", status)
+            .await
+            .expect("status transitions"));
+        tx.commit().await.expect("transition commits");
+    }
+
+    // A retired category finishes existing cycles only: new use is refused.
+    let retired = create_draft(&app, &cookie).await;
+    set_status(db.pool(), CategoryStatus::Retired).await;
+    assert_eq!(
+        publish_request(db.pool(), owner, retired).await,
+        Err(PublishError::RetiredCategory)
+    );
+    assert!(published_facts(db.pool(), retired).await.is_empty());
+    // A prohibited category is never usable.
+    set_status(db.pool(), CategoryStatus::Prohibited).await;
+    assert_eq!(
+        publish_request(db.pool(), owner, retired).await,
+        Err(PublishError::ProhibitedCategory)
+    );
+    assert!(published_facts(db.pool(), retired).await.is_empty());
+    set_status(db.pool(), CategoryStatus::Allowed).await;
+
+    // A disabled city cannot back a new publication.
+    let unserved = create_draft(&app, &cookie).await;
+    let mut tx = db.pool().begin().await.expect("transaction begins");
+    upsert_city(&mut tx, "campinas", "Campinas", false)
+        .await
+        .expect("city disables");
+    tx.commit().await.expect("disable commits");
+    assert_eq!(
+        publish_request(db.pool(), owner, unserved).await,
+        Err(PublishError::CityNotEnabled)
+    );
+    assert!(published_facts(db.pool(), unserved).await.is_empty());
+    let mut tx = db.pool().begin().await.expect("transaction begins");
+    upsert_city(&mut tx, "campinas", "Campinas", true)
+        .await
+        .expect("city re-enables");
+    tx.commit().await.expect("enable commits");
+
+    // Restricted accounts cannot publish, without distinguishing states.
+    let suspended = create_draft(&app, &cookie).await;
+    sqlx::query("UPDATE users SET state = 'suspended' WHERE id = $1")
+        .bind(owner)
+        .execute(db.pool())
+        .await
+        .expect("synthetic suspension applies");
+    assert_eq!(
+        publish_request(db.pool(), owner, suspended).await,
+        Err(PublishError::NotActive)
+    );
+    assert!(published_facts(db.pool(), suspended).await.is_empty());
+    assert_eq!(
+        publish_request(db.pool(), uuid::Uuid::now_v7(), suspended).await,
+        Err(PublishError::NotActive)
+    );
+    sqlx::query("UPDATE users SET state = 'active' WHERE id = $1")
+        .bind(owner)
+        .execute(db.pool())
+        .await
+        .expect("synthetic restoration applies");
+
+    // Missing rows and strangers share precise refusals once eligible again.
+    assert_eq!(
+        publish_request(db.pool(), owner, uuid::Uuid::now_v7()).await,
+        Err(PublishError::NotFound)
+    );
+    provision_active(&app, "+55 11 90000-0013", "Publish Stranger").await;
+    let stranger: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM users WHERE display_name = 'Publish Stranger'")
+            .fetch_one(db.pool())
+            .await
+            .expect("stranger reads");
+    assert_eq!(
+        publish_request(db.pool(), stranger, suspended).await,
+        Err(PublishError::NotFound)
+    );
+    // A terminal row is never republished (synthetic closure fixture: the
+    // closure writers arrive in a later card; the guard is proven here).
+    sqlx::query("UPDATE requests SET state = 'cancelled' WHERE id = $1")
+        .bind(suspended)
+        .execute(db.pool())
+        .await
+        .expect("synthetic closure applies");
+    assert_eq!(
+        publish_request(db.pool(), owner, suspended).await,
+        Err(PublishError::ForbiddenState)
+    );
+    assert!(published_facts(db.pool(), suspended).await.is_empty());
+
+    // Refused drafts stay drafts with no history and no facts.
+    for id in [retired, unserved] {
+        let stored = read_request(db.pool(), id)
+            .await
+            .expect("request reads")
+            .expect("draft reads");
+        assert_eq!(stored.state, "draft");
+        assert!(stored.original_published_at.is_none());
+    }
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn repeated_publication_returns_the_existing_result() {
+    let db = TestDatabase::create("p05t04_replay")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p05t04_replay_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let app = test_app(&db);
+    let owner = provision_active(&app, "+55 11 90000-0014", "Replay Owner").await;
+    let cookie = login_cookie(app.clone(), "+55 11 90000-0014").await;
+    let id = create_draft(&app, &cookie).await;
+
+    let first = publish_request(db.pool(), owner, id)
+        .await
+        .expect("valid draft publishes");
+    assert_eq!(
+        published_facts(db.pool(), id).await,
+        [("request.published".to_owned(), Some(1))]
+    );
+    // The repeat returns the same receipt: no second request, no second
+    // cycle, no second revision, no second event.
+    let second = publish_request(db.pool(), owner, id)
+        .await
+        .expect("repeat publication replays");
+    assert_eq!(second, first, "replay returns the existing result");
+    assert_eq!(
+        published_facts(db.pool(), id).await,
+        [("request.published".to_owned(), Some(1))]
+    );
+    assert_eq!(
+        cycles_for_request(db.pool(), id)
+            .await
+            .expect("cycles read")
+            .len(),
+        1
+    );
+    assert_eq!(
+        revisions_for_request(db.pool(), id)
+            .await
+            .expect("revisions read")
+            .len(),
+        1
+    );
+    assert_eq!(
+        requests_for_author(db.pool(), owner)
+            .await
+            .expect("owner reads")
+            .len(),
+        1
     );
     db.cleanup().await.expect("suite cleans up");
 }
