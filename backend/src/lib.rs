@@ -25,6 +25,8 @@ pub mod application {
     pub mod clock;
     /// Durable per-action deduplication (same key/body replays, changed body conflicts).
     pub mod idempotency;
+    /// Phone-verification provider boundary with a restricted deterministic fake.
+    pub mod phone_verification;
 }
 
 /// SQLx repositories, migrations, pool, and transaction machinery.
@@ -63,4 +65,6 @@ pub mod operations {
     pub mod lifecycle;
     /// Redacted structured observability (typed fields only, no secret channels).
     pub mod telemetry;
+    /// Live Twilio Verify adapter over an injected transport.
+    pub mod twilio_verify;
 }
