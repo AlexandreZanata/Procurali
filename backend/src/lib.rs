@@ -23,6 +23,8 @@ pub mod domain {
 pub mod application {
     /// Bounded verification abuse controls (guarded challenge flows).
     pub mod auth_limits;
+    /// Proof-gated phone reassignment with protected history.
+    pub mod change_phone;
     /// Effective-time port: production system clock vs frozen test clocks.
     pub mod clock;
     /// Durable per-action deduplication (same key/body replays, changed body conflicts).
@@ -45,6 +47,8 @@ pub mod persistence {
     pub mod migrations;
     /// In-product per-recipient notices with scoped acknowledgment.
     pub mod notices;
+    /// Phone-change history readers over recorded facts.
+    pub mod phone_history;
     /// Bounded pools, redacted handling, and liveness probes.
     pub mod pool;
     /// Bounded serializable transaction retry (DEC-0003 machinery).
