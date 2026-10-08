@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "note": "Synthetic cases only. Technical thresholds are disjoint from marketplace quotas (3 open requests, 6 activations/24h, 10 submissions/24h). No bypass path is specified in any configuration.",
+  "thresholds": {
+    "challenge_window_minutes": { "value": 5, "boundary": ["4:59 valid", "5:00 expired"] },
+    "confirmation_attempts_per_challenge": { "allowed": 5, "refused_at": 6 },
+    "resend_minimum_seconds": { "value": 60, "boundary": ["59s refused", "60s allowed"] },
+    "challenge_starts_per_phone_per_hour": { "allowed": 5, "refused_at": 6 },
+    "challenge_starts_per_ip_per_hour": { "allowed": 20, "refused_at": 21 },
+    "session_absolute_max_days": { "value": 7 },
+    "session_idle_max_hours": { "value": 24 }
+  },
+  "cases": [
+    {
+      "id": "challenge-submit-is-not-proof",
+      "scenario": "Challenge request accepted by the provider adapter.",
+      "expectation": "Account stays pending; no session issued. Only a provider-confirmed code activates (INV-04)."
+    },
+    {
+      "id": "duplicate-phone-refused",
+      "scenario": "Registration or phone change targets a number held by a non-deleted account.",
+      "expectation": "Refused with a generic response plus a recovery/review offer; no other owner's history revealed (INV-07, AC-03, EC-22)."
+    },
+    {
+      "id": "no-identity-bypass",
+      "scenario": "Requests forge X-User-Id, role payloads, predictable tokens, or a universal fake code.",
+      "expectation": "No such mechanism exists. All are unauthenticated or refused; sessions derive only from server-side digest comparison."
+    },
+    {
+      "id": "restricted-account-acts",
+      "scenario": "Pending, suspended, banned, or deleted session attempts publish, offer, or contact.",
+      "expectation": "Refused under current server state (INV-04). Only explicitly allowed safety/account-management actions proceed."
+    },
+    {
+      "id": "role-never-authorizes",
+      "scenario": "Authenticated non-owner (any declared role) acts on another account's resource.",
+      "expectation": "Refused: role labels never replace ownership, state, or block checks (INV-05)."
+    },
+    {
+      "id": "recycled-number-review",
+      "scenario": "A newly assigned subscriber's number matches a deleted account's history.",
+      "expectation": "Reviewed handling only; the new subscriber cannot inspect the previous owner's records (EC-22)."
+    },
+    {
+      "id": "production-refuses-fake",
+      "scenario": "Production configuration selects the deterministic fake provider.",
+      "expectation": "Startup refused. Missing live credentials block live certification only, never deterministic local construction."
+    }
+  ]
+}
