@@ -1,0 +1,49 @@
+# Disposable test database topology. Project identity comes from an explicit
+# `-p procurali-test-<suffix>` flag (helpers never use the default project).
+# Container, network, and volume names interpolate from TEST_* variables so
+# parallel runs with distinct suffixes share nothing.
+#
+# Separation guarantees (proven in P02-T01, enforced by P02-T02 helpers):
+# - Different Compose project name, container name, network name, and volume
+#   name from every other environment: teardown (`down -v`) cannot touch dev.
+# - Different loopback port (default 5433) and different database/credentials
+#   from development; the suite refuses a TEST_DATABASE_URL equal to the app URL.
+# - Same pinned PostgreSQL 18.6 image+digest as development.
+# - Same healthcheck contract: dependents require `service_healthy`.
+#
+# Databases inside the test project are disposable (`procurali_test_*`) and are
+# created per suite with reliable cleanup; the project itself is torn down with
+# `-v` after runs.
+
+services:
+  db:
+    image: postgres:18.6@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
+    container_name: ${TEST_CONTAINER_NAME:-procurali-test-db}
+    restart: "no"
+    environment:
+      POSTGRES_USER: ${TEST_POSTGRES_USER:-procurali_test}
+      POSTGRES_PASSWORD: ${TEST_POSTGRES_PASSWORD:-procurali-test-only-not-a-secret}
+      POSTGRES_DB: ${TEST_POSTGRES_DB:-procurali_test_bootstrap}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "127.0.0.1:${TEST_POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - test-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - test-net
+
+networks:
+  test-net:
+    name: ${TEST_NETWORK_NAME:-procurali-test-net}
+    driver: bridge
+    internal: false
+
+volumes:
+  test-pgdata:
+    name: ${TEST_VOLUME_NAME:-procurali-test-pgdata}

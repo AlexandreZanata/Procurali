@@ -1,0 +1,47 @@
+# Development database topology. Project identity: procurali-dev (set P02-T02 helpers
+# pass `-p procurali-dev` explicitly; never rely on directory-derived names).
+#
+# - PostgreSQL 18.6 pinned by tag AND digest (pulled 2026-10-08 from Docker Hub;
+#   re-resolve with `docker pull postgres:18.6` and update both on upgrade).
+# - Host access is loopback-only (127.0.0.1); the port is internal to deployed
+#   operation and never published beyond this machine here.
+# - Dependents must require service health, not container existence
+#   (`condition: service_healthy`); the backend service lands in a later card.
+# - This file is the dev identity. Test/staging/production use disjoint projects,
+#   volumes, ports, and credentials (see compose.test.yaml and P02-T02 helpers).
+
+services:
+  db:
+    image: postgres:18.6@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
+    container_name: procurali-dev-db
+    restart: "no"
+    env_file:
+      - path: ./env.dev
+        required: false
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-procurali}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-procurali-dev-only-not-a-secret}
+      POSTGRES_DB: ${POSTGRES_DB:-procurali_dev}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - procurali-dev-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - procurali-dev
+
+networks:
+  procurali-dev:
+    name: procurali-dev
+    driver: bridge
+    internal: false
+
+volumes:
+  procurali-dev-pgdata:
+    name: procurali-dev-pgdata
