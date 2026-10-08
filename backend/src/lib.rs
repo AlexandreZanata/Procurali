@@ -45,6 +45,8 @@ pub mod application {
     pub mod recovery;
     /// Minimal registration and phone-proof activation flows.
     pub mod register_user;
+    /// Owner removal: business concealment with immutable history.
+    pub mod remove_request;
     /// Explicit renewal: fresh seven-day cycles from eligible demand.
     pub mod renew_request;
     /// Private request draft creation and editing for the owning author.
