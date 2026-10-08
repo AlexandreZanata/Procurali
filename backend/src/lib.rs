@@ -27,8 +27,12 @@ pub mod application {
 
 /// SQLx repositories, migrations, pool, and transaction machinery.
 pub mod persistence {
+    /// Durable business events recorded with their mutation.
+    pub mod events;
     /// Compile-time migration journal and append-only runner.
     pub mod migrations;
+    /// In-product per-recipient notices with scoped acknowledgment.
+    pub mod notices;
     /// Bounded pools, redacted handling, and liveness probes.
     pub mod pool;
 }
