@@ -27,6 +27,8 @@ pub mod application {
     pub mod change_phone;
     /// Effective-time port: production system clock vs frozen test clocks.
     pub mod clock;
+    /// Exact duplicate demand: normalized same-owner open-need matching.
+    pub mod duplicate_intent;
     /// Shared current-account and relationship guards for writers.
     pub mod eligibility;
     /// Durable per-action deduplication (same key/body replays, changed body conflicts).
