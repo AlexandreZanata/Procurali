@@ -75,6 +75,8 @@ pub mod application {
     pub mod update_profile;
     /// First buyer view: sent-to-viewed engagement with one conversion fact.
     pub mod view_offer;
+    /// Seller withdrawal: terminal honesty without reservation inference.
+    pub mod withdraw_offer;
 }
 
 /// SQLx repositories, migrations, pool, and transaction machinery.
