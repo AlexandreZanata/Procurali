@@ -35,6 +35,12 @@ These instructions apply throughout this repository. Follow additional `AGENTS.m
 - Do not claim a feature is implemented because its documentation exists. Update project status only from evidence.
 - When implementation exists, verify behavior with the relevant acceptance scenarios and appropriate project checks.
 
+## Continuous integration
+
+- The full GitHub Actions workflow runs only on `main`, and only after the project is complete.
+- On construction branches, run the equivalent checks locally before every commit: `./scripts/check.sh fast` plus the real-PostgreSQL suites from `./scripts/ci.sh`.
+- Never push a branch merely to trigger a CI run; pushes deliver reviewed work, not verification runs.
+
 ## Finish a task
 
 Report changed files, verified behavior, checks actually run, and any unresolved decision. Leave enough context for another agent to continue without relying on this chat. Do not commit, publish, or send external messages unless the task authorizes it.

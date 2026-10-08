@@ -1,8 +1,11 @@
 name: verify
 
 on:
+  # Full CI runs only on main, and only after the project is complete.
+  # Construction branches verify locally before every commit (see AGENTS.md);
+  # pushes deliver reviewed work, never trigger verification runs.
   push:
-    branches: [codex/backend-mvp]
+    branches: [main]
   pull_request:
     branches: [main]
 
