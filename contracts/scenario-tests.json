@@ -1,0 +1,2643 @@
+{
+  "live_only_gates": [
+    "live phone-provider verification (P18-T07)",
+    "actual-host deployment smoke (P18)",
+    "off-host backup restore (P18)"
+  ],
+  "note": "Planned registry only. status planned means not yet implemented or run; no test is claimed passing. Tiers derive from the task manifest. Live-provider/host/backup gates are recorded separately and never satisfied by local fakes.",
+  "races": [
+    {
+      "id": "race-registration-phone",
+      "proving_tasks": [
+        "P04-T03",
+        "P04-T05",
+        "P04-T07"
+      ],
+      "scenario": "Two initial registrations/phone changes contend for one canonical phone.",
+      "status": "planned"
+    },
+    {
+      "id": "race-publication-slot",
+      "proving_tasks": [
+        "P05-T05"
+      ],
+      "scenario": "Two publications contend for the last open slot or activation allowance.",
+      "status": "planned"
+    },
+    {
+      "id": "race-duplicate-intent",
+      "proving_tasks": [
+        "P05-T06"
+      ],
+      "scenario": "Two identical intents published concurrently by one owner.",
+      "status": "planned"
+    },
+    {
+      "id": "race-offer-slot",
+      "proving_tasks": [
+        "P07-T03"
+      ],
+      "scenario": "Two offer submissions contend for one seller/cycle slot or daily allowance.",
+      "status": "planned"
+    },
+    {
+      "id": "race-revision-vs-offer",
+      "proving_tasks": [
+        "P07-T08"
+      ],
+      "scenario": "Budget/category/material revision races with offer submission and resubmission.",
+      "status": "planned"
+    },
+    {
+      "id": "race-withdrawal-vs-contact",
+      "proving_tasks": [
+        "P08-T06"
+      ],
+      "scenario": "Offer withdrawal or revision races with contact initiation.",
+      "status": "planned"
+    },
+    {
+      "id": "race-closure-vs-interaction",
+      "proving_tasks": [
+        "P09-T04"
+      ],
+      "scenario": "Buyer closure/expiry/renewal races with offer or contact.",
+      "status": "planned"
+    },
+    {
+      "id": "race-restriction-vs-contact",
+      "proving_tasks": [
+        "P11-T04",
+        "P11-T05",
+        "P11-T06"
+      ],
+      "scenario": "Account suspension/ban/deletion and category prohibition race with contact.",
+      "status": "planned"
+    },
+    {
+      "id": "race-block-vs-contact",
+      "proving_tasks": [
+        "P10-T02",
+        "P10-T06"
+      ],
+      "scenario": "Blocking races with contact; unblocking never resurrects old offers.",
+      "status": "planned"
+    },
+    {
+      "id": "race-idempotent-replay",
+      "proving_tasks": [
+        "P08-T04",
+        "P09-T01"
+      ],
+      "scenario": "Duplicate contact/outcome actions use the same idempotency identity concurrently.",
+      "status": "planned"
+    },
+    {
+      "id": "race-contact-allowance",
+      "proving_tasks": [
+        "P08-T05"
+      ],
+      "scenario": "Several distinct seller contacts contend for the final contact allowance.",
+      "status": "planned"
+    },
+    {
+      "id": "race-worker-claim",
+      "proving_tasks": [
+        "P06-T03",
+        "P09-T02"
+      ],
+      "scenario": "Two workers claim the same expiry/prompt/retention job; one crashes after claim.",
+      "status": "planned"
+    },
+    {
+      "id": "race-retry-vs-provider",
+      "proving_tasks": [
+        "P03-T06",
+        "P03-T07"
+      ],
+      "scenario": "A retryable transaction failure cannot repeat an external provider request or duplicate a business event.",
+      "status": "planned"
+    },
+    {
+      "id": "race-phone-change-vs-retry",
+      "proving_tasks": [
+        "P04-T07",
+        "P08-T04"
+      ],
+      "scenario": "A phone change occurs before an old contact request is retried; current destination authoritative, history unchanged.",
+      "status": "planned"
+    }
+  ],
+  "scenarios": {
+    "AC-01": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P13-T02",
+        "P13-T03",
+        "P16-T01",
+        "P17-T01",
+        "P19-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "privacy",
+        "web",
+        "e2e",
+        "unit",
+        "concurrency"
+      ]
+    },
+    "AC-02": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T06",
+        "P04-T02",
+        "P04-T03",
+        "P16-T02",
+        "P18-T07"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "api",
+        "privacy",
+        "integration",
+        "concurrency",
+        "web",
+        "e2e",
+        "ops"
+      ]
+    },
+    "AC-03": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T06",
+        "P04-T01",
+        "P04-T03",
+        "P04-T05",
+        "P04-T07",
+        "P04-T08",
+        "P12-T05",
+        "P16-T02"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "concurrency",
+        "privacy",
+        "unit",
+        "api",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-04": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P05-T04",
+        "P16-T03",
+        "P19-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "web",
+        "e2e",
+        "concurrency",
+        "privacy"
+      ]
+    },
+    "AC-05": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T04",
+        "P03-T01",
+        "P03-T04",
+        "P05-T01",
+        "P05-T03",
+        "P05-T04",
+        "P16-T03"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "api",
+        "privacy",
+        "integration",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-06": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P05-T05",
+        "P16-T03"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-07": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P03-T03",
+        "P05-T06",
+        "P16-T03"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-08": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T01",
+        "P16-T03"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-09": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T01",
+        "P07-T08",
+        "P16-T03"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-10": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T04",
+        "P03-T02",
+        "P05-T07",
+        "P06-T02",
+        "P06-T04",
+        "P16-T03",
+        "P16-T08",
+        "P17-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "concurrency",
+        "ops",
+        "web",
+        "e2e",
+        "critical-mutations"
+      ]
+    },
+    "AC-11": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T05",
+        "P07-T08",
+        "P16-T03"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-12": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T04",
+        "P06-T05",
+        "P09-T02",
+        "P16-T03"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "concurrency",
+        "ops",
+        "unit",
+        "api",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-13": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P03-T03",
+        "P05-T01",
+        "P13-T01",
+        "P13-T06",
+        "P16-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "concurrency",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-14": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P07-T02",
+        "P16-T04",
+        "P19-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "web",
+        "e2e",
+        "concurrency"
+      ]
+    },
+    "AC-15": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P07-T02",
+        "P16-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-16": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P03-T01",
+        "P07-T02",
+        "P16-T04",
+        "P17-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "web",
+        "e2e",
+        "critical-mutations"
+      ]
+    },
+    "AC-17": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P07-T03",
+        "P07-T05",
+        "P16-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-18": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P07-T05",
+        "P16-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-19": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T07",
+        "P03-T04",
+        "P07-T04",
+        "P12-T04",
+        "P16-T04",
+        "P19-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "api",
+        "privacy",
+        "integration",
+        "web",
+        "e2e",
+        "concurrency"
+      ]
+    },
+    "AC-20": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P07-T06",
+        "P08-T02",
+        "P16-T04",
+        "P16-T05"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-21": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P08-T02",
+        "P08-T03",
+        "P16-T05",
+        "P18-T07",
+        "P19-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "web",
+        "e2e",
+        "ops",
+        "concurrency"
+      ]
+    },
+    "AC-22": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T07",
+        "P08-T02",
+        "P12-T04",
+        "P16-T05",
+        "P17-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "web",
+        "e2e",
+        "critical-mutations"
+      ]
+    },
+    "AC-23": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P08-T04",
+        "P15-T02",
+        "P16-T05",
+        "P17-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "web",
+        "e2e",
+        "critical-mutations"
+      ]
+    },
+    "AC-24": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P08-T03",
+        "P16-T05",
+        "P18-T05"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "web",
+        "e2e",
+        "concurrency",
+        "ops"
+      ]
+    },
+    "AC-25": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P04-T04",
+        "P04-T10",
+        "P08-T02",
+        "P11-T04",
+        "P16-T05",
+        "P16-T07",
+        "P16-T08",
+        "P18-T05"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "concurrency",
+        "web",
+        "e2e",
+        "ops"
+      ]
+    },
+    "AC-26": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P07-T07",
+        "P08-T04",
+        "P16-T05"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-27": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P08-T05",
+        "P16-T05"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "web",
+        "e2e",
+        "privacy"
+      ]
+    },
+    "AC-28": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T06",
+        "P09-T01",
+        "P09-T04",
+        "P16-T05",
+        "P19-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-29": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P09-T01",
+        "P16-T05"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "web",
+        "e2e",
+        "privacy"
+      ]
+    },
+    "AC-30": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T06",
+        "P09-T01",
+        "P09-T04",
+        "P16-T03",
+        "P16-T05"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-31": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T06",
+        "P09-T01",
+        "P09-T02",
+        "P14-T03",
+        "P16-T05",
+        "P19-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "ops",
+        "web",
+        "e2e",
+        "privacy"
+      ]
+    },
+    "AC-32": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P13-T05",
+        "P15-T04",
+        "P16-T02"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-33": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P13-T04",
+        "P13-T05",
+        "P16-T06",
+        "P19-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "web",
+        "e2e",
+        "concurrency"
+      ]
+    },
+    "AC-34": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P11-T03",
+        "P12-T04",
+        "P13-T02",
+        "P13-T03",
+        "P13-T06",
+        "P15-T04",
+        "P16-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "privacy",
+        "concurrency",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-35": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P04-T10",
+        "P10-T01",
+        "P10-T02",
+        "P10-T06",
+        "P16-T06",
+        "P17-T04",
+        "P19-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "concurrency",
+        "web",
+        "e2e",
+        "critical-mutations"
+      ]
+    },
+    "AC-36": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P10-T02",
+        "P10-T06",
+        "P16-T06"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-37": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P10-T04",
+        "P16-T06"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-38": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P10-T05",
+        "P11-T02",
+        "P14-T04",
+        "P16-T06",
+        "P16-T07"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "unit",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-39": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P11-T01",
+        "P11-T02",
+        "P11-T06",
+        "P11-T07",
+        "P14-T06",
+        "P16-T07",
+        "P19-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "privacy",
+        "unit",
+        "concurrency",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-40": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P12-T01",
+        "P12-T03",
+        "P12-T04",
+        "P16-T06",
+        "P19-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "ops",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-41": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P04-T06",
+        "P12-T05",
+        "P16-T02"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "concurrency",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-42": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P14-T01",
+        "P14-T02",
+        "P16-T06"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-43": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P11-T08",
+        "P16-T07",
+        "P19-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-44": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T07",
+        "P04-T09",
+        "P14-T04",
+        "P16-T06",
+        "P19-T01",
+        "P19-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "web",
+        "e2e",
+        "concurrency",
+        "ops"
+      ]
+    },
+    "AC-45": {
+      "disposition": "future-deferred",
+      "proving_tasks": [],
+      "status": "planned",
+      "tiers": []
+    },
+    "AC-46": {
+      "disposition": "future-deferred",
+      "proving_tasks": [],
+      "status": "planned",
+      "tiers": []
+    },
+    "AC-47": {
+      "disposition": "future-deferred",
+      "proving_tasks": [],
+      "status": "planned",
+      "tiers": []
+    },
+    "AC-48": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P14-T03",
+        "P14-T05",
+        "P16-T05",
+        "P17-T01",
+        "P19-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "web",
+        "e2e",
+        "privacy",
+        "concurrency"
+      ]
+    },
+    "AC-49": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T02",
+        "P06-T04",
+        "P11-T03",
+        "P11-T04",
+        "P11-T06",
+        "P16-T07",
+        "P19-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "ops",
+        "privacy",
+        "web",
+        "e2e"
+      ]
+    },
+    "AC-50": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P11-T08",
+        "P14-T06",
+        "P16-T07",
+        "P17-T01",
+        "P19-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "web",
+        "e2e",
+        "unit"
+      ]
+    },
+    "EC-01": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P12-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "concurrency",
+        "privacy"
+      ]
+    },
+    "EC-02": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P12-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "concurrency",
+        "privacy"
+      ]
+    },
+    "EC-03": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T06",
+        "P06-T07",
+        "P07-T08",
+        "P09-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "concurrency"
+      ]
+    },
+    "EC-04": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P07-T07",
+        "P08-T04",
+        "P14-T05"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "unit"
+      ]
+    },
+    "EC-05": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P11-T05"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "concurrency",
+        "privacy"
+      ]
+    },
+    "EC-06": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P11-T05"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "concurrency",
+        "privacy"
+      ]
+    },
+    "EC-07": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T05",
+        "P03-T02",
+        "P06-T02",
+        "P08-T06",
+        "P17-T03"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "privacy"
+      ]
+    },
+    "EC-08": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T05",
+        "P07-T08",
+        "P09-T04",
+        "P14-T05"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "privacy"
+      ]
+    },
+    "EC-09": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T01",
+        "P07-T08"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency"
+      ]
+    },
+    "EC-10": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P07-T06",
+        "P08-T01",
+        "P08-T06"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "privacy"
+      ]
+    },
+    "EC-11": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P07-T07",
+        "P16-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "web",
+        "e2e",
+        "privacy"
+      ]
+    },
+    "EC-12": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P07-T07",
+        "P08-T05"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "unit",
+        "concurrency"
+      ]
+    },
+    "EC-13": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P07-T04",
+        "P07-T05",
+        "P08-T05",
+        "P16-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "privacy",
+        "concurrency",
+        "unit",
+        "web",
+        "e2e"
+      ]
+    },
+    "EC-14": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T07",
+        "P10-T03",
+        "P10-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "privacy",
+        "unit"
+      ]
+    },
+    "EC-15": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P11-T03",
+        "P13-T02",
+        "P13-T03",
+        "P13-T04",
+        "P13-T06",
+        "P16-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "privacy",
+        "unit",
+        "concurrency",
+        "web",
+        "e2e"
+      ]
+    },
+    "EC-16": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P11-T08",
+        "P13-T02",
+        "P13-T06"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "concurrency",
+        "privacy"
+      ]
+    },
+    "EC-17": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P04-T06",
+        "P12-T05",
+        "P13-T01",
+        "P16-T02"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "concurrency",
+        "web",
+        "e2e"
+      ]
+    },
+    "EC-18": {
+      "disposition": "future-deferred",
+      "proving_tasks": [
+        "P04-T09",
+        "P17-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "concurrency",
+        "e2e"
+      ]
+    },
+    "EC-19": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T02",
+        "P06-T04",
+        "P08-T06",
+        "P11-T04",
+        "P11-T06"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "ops",
+        "privacy"
+      ]
+    },
+    "EC-20": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T06",
+        "P09-T01",
+        "P11-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "privacy"
+      ]
+    },
+    "EC-21": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P04-T07",
+        "P08-T04",
+        "P12-T05",
+        "P16-T02"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "web",
+        "e2e"
+      ]
+    },
+    "EC-22": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T06",
+        "P04-T01",
+        "P04-T07",
+        "P04-T08",
+        "P12-T05",
+        "P16-T02"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "concurrency",
+        "privacy",
+        "api",
+        "web",
+        "e2e"
+      ]
+    },
+    "EC-23": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P08-T04",
+        "P08-T06",
+        "P10-T01",
+        "P10-T02",
+        "P10-T06"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "unit"
+      ]
+    },
+    "EC-24": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P10-T02",
+        "P10-T06"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "concurrency",
+        "privacy"
+      ]
+    },
+    "EC-25": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T05",
+        "P03-T06",
+        "P03-T07",
+        "P08-T01",
+        "P08-T04",
+        "P08-T06",
+        "P17-T03"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "concurrency",
+        "privacy",
+        "api"
+      ]
+    },
+    "EC-26": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T06",
+        "P09-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency"
+      ]
+    },
+    "EC-27": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T06",
+        "P06-T07",
+        "P09-T01",
+        "P09-T04",
+        "P11-T07"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "concurrency"
+      ]
+    },
+    "EC-28": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T01",
+        "P11-T03",
+        "P11-T06"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "concurrency"
+      ]
+    },
+    "EC-29": {
+      "disposition": "future-deferred",
+      "proving_tasks": [
+        "P17-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "e2e"
+      ]
+    },
+    "EC-30": {
+      "disposition": "future-deferred",
+      "proving_tasks": [
+        "P17-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "e2e"
+      ]
+    },
+    "EC-31": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P10-T04",
+        "P10-T05",
+        "P11-T02"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "concurrency"
+      ]
+    },
+    "EC-32": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P05-T05",
+        "P05-T06",
+        "P06-T07"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "privacy"
+      ]
+    },
+    "EC-33": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P07-T03",
+        "P07-T08"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency"
+      ]
+    },
+    "EC-34": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T05",
+        "P07-T02",
+        "P07-T08",
+        "P13-T05",
+        "P17-T03"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "concurrency"
+      ]
+    },
+    "EC-35": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P03-T03",
+        "P05-T01",
+        "P11-T08",
+        "P13-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "privacy"
+      ]
+    },
+    "EC-36": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T05",
+        "P08-T06",
+        "P11-T03",
+        "P11-T04",
+        "P11-T05",
+        "P11-T06",
+        "P11-T08",
+        "P16-T07"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "concurrency",
+        "privacy",
+        "api",
+        "web",
+        "e2e"
+      ]
+    },
+    "EC-37": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P13-T02",
+        "P13-T03",
+        "P13-T04",
+        "P13-T05",
+        "P16-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "privacy",
+        "unit",
+        "web",
+        "e2e"
+      ]
+    },
+    "EC-38": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P10-T03",
+        "P12-T01",
+        "P12-T02",
+        "P12-T03"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "privacy",
+        "api",
+        "concurrency",
+        "unit",
+        "ops"
+      ]
+    },
+    "INV-01": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T07",
+        "P03-T04",
+        "P05-T02",
+        "P05-T03",
+        "P17-T02"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "api",
+        "privacy",
+        "integration"
+      ]
+    },
+    "INV-02": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T07",
+        "P07-T01",
+        "P17-T02"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "concurrency",
+        "api",
+        "privacy"
+      ]
+    },
+    "INV-03": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P07-T01",
+        "P07-T02",
+        "P17-T02"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "concurrency",
+        "unit",
+        "api",
+        "privacy"
+      ]
+    },
+    "INV-04": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T06",
+        "P04-T01",
+        "P04-T02",
+        "P04-T03",
+        "P04-T04",
+        "P04-T10",
+        "P11-T04",
+        "P11-T05",
+        "P12-T01",
+        "P17-T02",
+        "P17-T05"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "concurrency",
+        "privacy",
+        "unit",
+        "api",
+        "ops"
+      ]
+    },
+    "INV-05": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T06",
+        "P00-T07",
+        "P03-T04",
+        "P04-T04",
+        "P04-T10",
+        "P05-T03",
+        "P05-T07",
+        "P07-T04",
+        "P09-T03",
+        "P10-T01",
+        "P10-T04",
+        "P11-T01",
+        "P15-T02",
+        "P15-T04",
+        "P17-T02",
+        "P17-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "api",
+        "privacy",
+        "integration",
+        "web",
+        "critical-mutations"
+      ]
+    },
+    "INV-06": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P04-T09",
+        "P11-T01",
+        "P17-T02"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy"
+      ]
+    },
+    "INV-07": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T06",
+        "P04-T01",
+        "P04-T03",
+        "P04-T05",
+        "P04-T07",
+        "P04-T08",
+        "P12-T05",
+        "P16-T02"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "concurrency",
+        "privacy",
+        "unit",
+        "api",
+        "web",
+        "e2e"
+      ]
+    },
+    "INV-08": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T04",
+        "P03-T02",
+        "P05-T01",
+        "P05-T02",
+        "P05-T04",
+        "P05-T05",
+        "P06-T02",
+        "P11-T08",
+        "P13-T01",
+        "P17-T03"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "concurrency"
+      ]
+    },
+    "INV-09": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P03-T02",
+        "P05-T07",
+        "P06-T02",
+        "P06-T04",
+        "P06-T06",
+        "P06-T07",
+        "P07-T02",
+        "P07-T08",
+        "P08-T02",
+        "P08-T06",
+        "P09-T04",
+        "P11-T03",
+        "P13-T01",
+        "P13-T02",
+        "P13-T04",
+        "P13-T05",
+        "P13-T06",
+        "P15-T04",
+        "P16-T08",
+        "P17-T03",
+        "P17-T04",
+        "P18-T05",
+        "P19-T02",
+        "P20-T01",
+        "P20-T03",
+        "P20-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "concurrency",
+        "ops",
+        "web",
+        "e2e",
+        "critical-mutations",
+        "load"
+      ]
+    },
+    "INV-10": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T04",
+        "P03-T01",
+        "P05-T02",
+        "P05-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "privacy",
+        "api"
+      ]
+    },
+    "INV-11": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P03-T03",
+        "P05-T01",
+        "P05-T03",
+        "P05-T04",
+        "P05-T06"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "concurrency"
+      ]
+    },
+    "INV-12": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P05-T02",
+        "P05-T04",
+        "P06-T04",
+        "P06-T05",
+        "P09-T02",
+        "P14-T03",
+        "P14-T05"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "privacy",
+        "unit",
+        "api",
+        "concurrency",
+        "ops"
+      ]
+    },
+    "INV-13": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T04",
+        "P06-T05",
+        "P06-T06",
+        "P06-T07",
+        "P09-T01",
+        "P09-T02",
+        "P09-T04",
+        "P14-T03"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "concurrency",
+        "ops",
+        "unit",
+        "api",
+        "privacy"
+      ]
+    },
+    "INV-14": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T05",
+        "P05-T02",
+        "P06-T01",
+        "P07-T08",
+        "P17-T03"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "privacy",
+        "unit",
+        "api",
+        "concurrency"
+      ]
+    },
+    "INV-15": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T05",
+        "P05-T05",
+        "P05-T06",
+        "P06-T01",
+        "P06-T05",
+        "P06-T07",
+        "P07-T03",
+        "P11-T08",
+        "P17-T03",
+        "P19-T02"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "load"
+      ]
+    },
+    "INV-16": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P03-T03",
+        "P04-T06",
+        "P12-T05",
+        "P13-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "concurrency"
+      ]
+    },
+    "INV-17": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P07-T02"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy"
+      ]
+    },
+    "INV-18": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P07-T01",
+        "P07-T03",
+        "P07-T05",
+        "P07-T07",
+        "P07-T08",
+        "P17-T03",
+        "P19-T02"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "concurrency",
+        "unit",
+        "api",
+        "privacy",
+        "load"
+      ]
+    },
+    "INV-19": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T04",
+        "P03-T01",
+        "P07-T01",
+        "P07-T02",
+        "P07-T06",
+        "P17-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "concurrency",
+        "api",
+        "privacy",
+        "critical-mutations"
+      ]
+    },
+    "INV-20": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P03-T03",
+        "P07-T02"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy"
+      ]
+    },
+    "INV-21": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P07-T02"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy"
+      ]
+    },
+    "INV-22": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P03-T03",
+        "P05-T01",
+        "P07-T02",
+        "P13-T01"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy"
+      ]
+    },
+    "INV-23": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P07-T07",
+        "P08-T05"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "unit",
+        "concurrency"
+      ]
+    },
+    "INV-24": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T05",
+        "P03-T05",
+        "P04-T07",
+        "P07-T01",
+        "P07-T06",
+        "P08-T01",
+        "P08-T06",
+        "P12-T05",
+        "P17-T03",
+        "P18-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "privacy",
+        "api",
+        "concurrency",
+        "unit",
+        "ops"
+      ]
+    },
+    "INV-25": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P07-T04",
+        "P07-T05",
+        "P07-T06",
+        "P07-T07",
+        "P08-T02",
+        "P09-T04",
+        "P10-T02",
+        "P11-T05",
+        "P11-T06",
+        "P12-T01",
+        "P14-T05"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "privacy",
+        "concurrency",
+        "unit"
+      ]
+    },
+    "INV-26": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T05",
+        "P07-T08",
+        "P09-T04",
+        "P11-T06"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "privacy"
+      ]
+    },
+    "INV-27": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T07",
+        "P08-T02",
+        "P17-T02"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy"
+      ]
+    },
+    "INV-28": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T05",
+        "P04-T10",
+        "P08-T02",
+        "P08-T04",
+        "P08-T05",
+        "P08-T06",
+        "P10-T01",
+        "P10-T06",
+        "P11-T04",
+        "P11-T05",
+        "P12-T01",
+        "P12-T05",
+        "P16-T08",
+        "P17-T03",
+        "P17-T04",
+        "P18-T02",
+        "P18-T05",
+        "P19-T02",
+        "P20-T01",
+        "P20-T02",
+        "P20-T03",
+        "P20-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "concurrency",
+        "web",
+        "e2e",
+        "critical-mutations",
+        "ops",
+        "load"
+      ]
+    },
+    "INV-29": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T07",
+        "P03-T07",
+        "P08-T01",
+        "P08-T02",
+        "P08-T04",
+        "P12-T04",
+        "P15-T02"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "concurrency",
+        "privacy",
+        "unit",
+        "api",
+        "web"
+      ]
+    },
+    "INV-30": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T07",
+        "P07-T02",
+        "P07-T04",
+        "P08-T02",
+        "P08-T03",
+        "P12-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy"
+      ]
+    },
+    "INV-31": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T07",
+        "P01-T03",
+        "P03-T04",
+        "P03-T05",
+        "P04-T01",
+        "P04-T06",
+        "P04-T07",
+        "P05-T02",
+        "P05-T03",
+        "P05-T07",
+        "P07-T04",
+        "P08-T03",
+        "P09-T03",
+        "P10-T03",
+        "P10-T04",
+        "P10-T06",
+        "P11-T02",
+        "P12-T02",
+        "P12-T03",
+        "P12-T04",
+        "P13-T02",
+        "P13-T03",
+        "P13-T04",
+        "P13-T05",
+        "P13-T06",
+        "P14-T02",
+        "P14-T06",
+        "P15-T02",
+        "P15-T03",
+        "P15-T04",
+        "P15-T05",
+        "P16-T01",
+        "P16-T08",
+        "P17-T02",
+        "P17-T05",
+        "P18-T02",
+        "P18-T04",
+        "P18-T06",
+        "P18-T07",
+        "P20-T01",
+        "P20-T02",
+        "P20-T03",
+        "P20-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "privacy",
+        "api",
+        "integration",
+        "concurrency",
+        "ops",
+        "web",
+        "e2e",
+        "load"
+      ]
+    },
+    "INV-32": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P08-T03",
+        "P12-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy"
+      ]
+    },
+    "INV-33": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P08-T01",
+        "P08-T03",
+        "P13-T04",
+        "P14-T03"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "concurrency",
+        "privacy",
+        "unit",
+        "api"
+      ]
+    },
+    "INV-34": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T05",
+        "P03-T05",
+        "P03-T06",
+        "P03-T07",
+        "P05-T04",
+        "P06-T03",
+        "P06-T06",
+        "P07-T05",
+        "P08-T01",
+        "P08-T04",
+        "P08-T06",
+        "P09-T01",
+        "P09-T02",
+        "P09-T03",
+        "P10-T05",
+        "P11-T07",
+        "P12-T03",
+        "P14-T01",
+        "P15-T02",
+        "P17-T03",
+        "P17-T04",
+        "P17-T06",
+        "P18-T05",
+        "P19-T02",
+        "P20-T03",
+        "P20-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "privacy",
+        "concurrency",
+        "unit",
+        "api",
+        "ops",
+        "web",
+        "critical-mutations",
+        "e2e",
+        "load"
+      ]
+    },
+    "INV-35": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P04-T10",
+        "P10-T01",
+        "P10-T02",
+        "P10-T06",
+        "P13-T01",
+        "P13-T02",
+        "P13-T06"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "concurrency"
+      ]
+    },
+    "INV-36": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P04-T05",
+        "P10-T03",
+        "P10-T04",
+        "P10-T05",
+        "P11-T02",
+        "P11-T05",
+        "P11-T07",
+        "P14-T01",
+        "P14-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "privacy"
+      ]
+    },
+    "INV-37": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P11-T01",
+        "P11-T02",
+        "P11-T03",
+        "P11-T04",
+        "P11-T05",
+        "P11-T06",
+        "P11-T07",
+        "P11-T08",
+        "P14-T06",
+        "P18-T06"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "privacy",
+        "unit",
+        "concurrency",
+        "ops"
+      ]
+    },
+    "INV-38": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P00-T05",
+        "P08-T06",
+        "P10-T02",
+        "P11-T03",
+        "P11-T04",
+        "P11-T05",
+        "P11-T06",
+        "P11-T07",
+        "P11-T08",
+        "P17-T03",
+        "P20-T03"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "concurrency",
+        "privacy",
+        "api"
+      ]
+    },
+    "INV-39": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P04-T09",
+        "P14-T02",
+        "P14-T04",
+        "P19-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "privacy",
+        "ops"
+      ]
+    },
+    "INV-40": {
+      "disposition": "future-deferred",
+      "proving_tasks": [
+        "P17-T01",
+        "P19-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "e2e",
+        "ops"
+      ]
+    },
+    "INV-41": {
+      "disposition": "future-deferred",
+      "proving_tasks": [
+        "P17-T01",
+        "P19-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "privacy",
+        "e2e",
+        "ops"
+      ]
+    },
+    "INV-42": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P11-T07",
+        "P11-T08",
+        "P12-T03",
+        "P14-T01",
+        "P14-T02",
+        "P14-T03",
+        "P14-T04",
+        "P14-T05",
+        "P14-T06"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "privacy",
+        "concurrency",
+        "ops",
+        "unit"
+      ]
+    },
+    "INV-43": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T06",
+        "P09-T01",
+        "P11-T07",
+        "P14-T02",
+        "P14-T03",
+        "P14-T06"
+      ],
+      "status": "planned",
+      "tiers": [
+        "unit",
+        "integration",
+        "api",
+        "concurrency",
+        "privacy"
+      ]
+    },
+    "INV-44": {
+      "disposition": "mandatory",
+      "proving_tasks": [
+        "P06-T07",
+        "P12-T01",
+        "P12-T02",
+        "P12-T03",
+        "P18-T04"
+      ],
+      "status": "planned",
+      "tiers": [
+        "integration",
+        "api",
+        "privacy",
+        "concurrency",
+        "unit",
+        "ops"
+      ]
+    }
+  },
+  "tiers": [
+    "unit",
+    "integration",
+    "api",
+    "concurrency",
+    "privacy",
+    "web",
+    "e2e",
+    "ops"
+  ],
+  "version": 1
+}
