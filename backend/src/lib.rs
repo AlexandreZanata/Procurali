@@ -35,6 +35,10 @@ pub mod persistence {
 
 /// Axum router, handlers, DTO allowlists, and structured errors.
 pub mod http {
+    /// Response allowlists and strict request bodies.
+    pub mod dto;
+    /// Structured errors: closed codes, exact statuses, secret-free messages.
+    pub mod errors;
     /// Liveness/readiness probes over dependency flags (no values in output).
     pub mod health;
     /// Router with explicit size/time bounds and stable errors.
