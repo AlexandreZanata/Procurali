@@ -18,4 +18,7 @@ pub mod persistence {}
 pub mod http {}
 
 /// Validated configuration, redacted logging, lifecycle, and workers.
-pub mod operations {}
+pub mod operations {
+    /// Validated runtime configuration (no default secrets, redacted output).
+    pub mod config;
+}
