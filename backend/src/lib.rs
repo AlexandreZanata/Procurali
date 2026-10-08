@@ -37,6 +37,8 @@ pub mod application {
     pub mod idempotency;
     /// Offer submission quotas: daily allowance and slot permanence.
     pub mod offer_limits;
+    /// Private offer comparison reads: buyer sets and seller self-views.
+    pub mod offer_reads;
     /// Phone-verification provider boundary with a restricted deterministic fake.
     pub mod phone_verification;
     /// Declared professional classification, free and separate.

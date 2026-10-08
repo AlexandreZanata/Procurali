@@ -17,15 +17,20 @@
 
 use axum::{
     body::Bytes,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use super::errors::{ApiError, Code};
+use crate::application::offer_reads::{
+    buyer_offers, seller_offer, seller_offers, BuyerOfferView, OfferReadError, OfferSort,
+    SellerOfferView,
+};
 use crate::application::sessions::authenticate;
 use crate::application::submit_offer::{submit_offer, OfferInput, SubmitError};
 use crate::domain::money::MoneyError;
@@ -45,10 +50,14 @@ impl OffersState {
 }
 
 /// Mount the offer routes under `/api/v1` for tests and, later, the
-/// production router merge.
+/// production router merge. The static `/mine` segment takes precedence
+/// over the `{id}` capture at the same position.
 pub fn routes(state: OffersState) -> Router {
     Router::new()
         .route("/api/v1/requests/{id}/offers", post(submit))
+        .route("/api/v1/requests/{id}/offers", get(list_for_request))
+        .route("/api/v1/offers/mine", get(list_mine))
+        .route("/api/v1/offers/{id}", get(read_mine))
         .with_state(state)
 }
 
@@ -291,5 +300,181 @@ async fn submit(
         )
             .into_response(),
         Err(error) => submit_error(error),
+    }
+}
+
+/// One offer as its buyer sees it: terms, seller card, and derived flags.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct BuyerOfferResponse {
+    id: uuid::Uuid,
+    request_id: uuid::Uuid,
+    cycle_number: i32,
+    revision_number: i32,
+    description: String,
+    price: String,
+    condition: String,
+    city_code: String,
+    city_label: String,
+    region_code: String,
+    region_label: String,
+    notes: String,
+    seller_name: String,
+    seller_business_name: Option<String>,
+    seller_business_type: Option<String>,
+    state: String,
+    live: bool,
+    contact_allowed: bool,
+}
+
+/// One offer as its seller sees it: own terms plus derived flags.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct SellerOfferResponse {
+    id: uuid::Uuid,
+    request_id: uuid::Uuid,
+    cycle_number: i32,
+    revision_number: i32,
+    description: String,
+    price: String,
+    condition: String,
+    city_code: String,
+    region_code: String,
+    notes: String,
+    state: String,
+    live: bool,
+    contact_allowed: bool,
+}
+
+/// Buyer comparison set with its collapsed history.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct BuyerListResponse {
+    live: Vec<BuyerOfferResponse>,
+    history: Vec<BuyerOfferResponse>,
+    total: usize,
+}
+
+fn buyer_response(view: BuyerOfferView) -> BuyerOfferResponse {
+    BuyerOfferResponse {
+        id: view.id,
+        request_id: view.request_id,
+        cycle_number: view.cycle_number,
+        revision_number: view.revision_number,
+        description: view.description,
+        price: view.price,
+        condition: view.condition,
+        city_code: view.city_code,
+        city_label: view.city_label,
+        region_code: view.region_code,
+        region_label: view.region_label,
+        notes: view.notes,
+        seller_name: view.seller_name,
+        seller_business_name: view.seller_business_name,
+        seller_business_type: view.seller_business_type,
+        state: view.state,
+        live: view.live,
+        contact_allowed: view.contact_allowed,
+    }
+}
+
+fn seller_response(view: SellerOfferView) -> SellerOfferResponse {
+    SellerOfferResponse {
+        id: view.id,
+        request_id: view.request_id,
+        cycle_number: view.cycle_number,
+        revision_number: view.revision_number,
+        description: view.description,
+        price: view.price,
+        condition: view.condition,
+        city_code: view.city_code,
+        region_code: view.region_code,
+        notes: view.notes,
+        state: view.state,
+        live: view.live,
+        contact_allowed: view.contact_allowed,
+    }
+}
+
+fn read_error(error: OfferReadError) -> Response {
+    match error {
+        OfferReadError::NotActive => {
+            ApiError::new(Code::Unauthenticated, "no usable session").into_response()
+        }
+        OfferReadError::NotFound => {
+            ApiError::new(Code::NotFound, "offer not found").into_response()
+        }
+        OfferReadError::StorageFailed => ApiError::internal().into_response(),
+    }
+}
+
+fn parse_sort(params: &HashMap<String, String>) -> Result<OfferSort, ApiError> {
+    OfferSort::parse(params.get("sort").map(String::as_str))
+        .ok_or_else(|| ApiError::new(Code::InvalidField, "offer sort is invalid"))
+}
+
+/// List the request's offers for its owning buyer, live apart from history.
+async fn list_for_request(
+    State(state): State<OffersState>,
+    headers: HeaderMap,
+    Path(id): Path<uuid::Uuid>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Response {
+    let user_id = match authenticated_user(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(error) => return error.into_response(),
+    };
+    let sort = match parse_sort(&params) {
+        Ok(sort) => sort,
+        Err(error) => return error.into_response(),
+    };
+    match buyer_offers(&state.pool, user_id, id, sort).await {
+        Ok(list) => (
+            StatusCode::OK,
+            Json(BuyerListResponse {
+                live: list.live.into_iter().map(buyer_response).collect(),
+                history: list.history.into_iter().map(buyer_response).collect(),
+                total: list.total,
+            }),
+        )
+            .into_response(),
+        Err(error) => read_error(error),
+    }
+}
+
+/// List the caller's own offers newest-first across requests.
+async fn list_mine(
+    State(state): State<OffersState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+) -> Response {
+    let user_id = match authenticated_user(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(error) => return error.into_response(),
+    };
+    let sort = match parse_sort(&params) {
+        Ok(sort) => sort,
+        Err(error) => return error.into_response(),
+    };
+    match seller_offers(&state.pool, user_id, sort).await {
+        Ok(views) => (
+            StatusCode::OK,
+            Json(views.into_iter().map(seller_response).collect::<Vec<_>>()),
+        )
+            .into_response(),
+        Err(error) => read_error(error),
+    }
+}
+
+/// Return one of the caller's own offers.
+async fn read_mine(
+    State(state): State<OffersState>,
+    headers: HeaderMap,
+    Path(id): Path<uuid::Uuid>,
+) -> Response {
+    let user_id = match authenticated_user(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(error) => return error.into_response(),
+    };
+    match seller_offer(&state.pool, user_id, id).await {
+        Ok(view) => (StatusCode::OK, Json(seller_response(view))).into_response(),
+        Err(error) => read_error(error),
     }
 }
