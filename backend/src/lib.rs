@@ -21,6 +21,8 @@ pub mod domain {
 
 /// Business operations owning eligibility and transaction boundaries.
 pub mod application {
+    /// Bounded verification abuse controls (guarded challenge flows).
+    pub mod auth_limits;
     /// Effective-time port: production system clock vs frozen test clocks.
     pub mod clock;
     /// Durable per-action deduplication (same key/body replays, changed body conflicts).
