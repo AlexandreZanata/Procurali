@@ -33,6 +33,8 @@ pub mod application {
     pub mod register_user;
     /// Session lifecycle: login after proof and current-state authentication.
     pub mod sessions;
+    /// Owner profile editing: display name and default locality.
+    pub mod update_profile;
 }
 
 /// SQLx repositories, migrations, pool, and transaction machinery.

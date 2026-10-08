@@ -8,9 +8,13 @@
 //! codes (200; the caller's own elapsed window reports 410 with code
 //! `expired`, wrong or unknown proofs report 422 `verification_failed`).
 //! Duplicate numbers are refused with 409 and a static recovery offer that
-//! reveals no other owner's history (AC-03). Sessions and cookies arrive with
-//! the session lifecycle card; merging these routes into the production router
-//! (with its body/timeout bounds) lands with the card that owns the merge.
+//! reveals no other owner's history (AC-03). `PATCH /api/v1/accounts/me`
+//! lets the session owner update display name and default locality (200;
+//! strangers answer 401, phone-shaped text answers 400): the user row only,
+//! never resource snapshots (INV-16, AC-41, EC-17). Sessions and cookies
+//! arrive with the session lifecycle card; merging these routes into the
+//! production router (with its body/timeout bounds) lands with the card that
+//! owns the merge.
 //!
 //! Bodies are strict (`deny_unknown_fields`): protected or unrelated fields
 //! (CPF, documents, photos, birth dates, addresses, roles, states) are refused
@@ -21,9 +25,9 @@ use std::sync::Arc;
 use axum::{
     body::Bytes,
     extract::State,
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    routing::post,
+    routing::{patch, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -34,6 +38,8 @@ use crate::application::register_user::{
     confirm_challenge, register_account, start_challenge, ChallengeDispatch, ConfirmationOutcome,
     RegistrationError, CHALLENGE_WINDOW,
 };
+use crate::application::sessions::authenticate;
+use crate::application::update_profile::{update_profile, ProfileError, ProfileUpdate};
 use crate::persistence::users::{NewUser, PhoneKeys};
 
 /// Shared state for the account routes: pool, provider, and phone keys.
@@ -86,6 +92,7 @@ where
         .route("/api/v1/accounts", post(register))
         .route("/api/v1/accounts/challenges", post(request_challenge))
         .route("/api/v1/accounts/challenges/confirmations", post(confirm))
+        .route("/api/v1/accounts/me", patch(update_me))
         .with_state(state)
 }
 
@@ -269,5 +276,145 @@ where
             ApiError::new(Code::RateLimited, "challenge rate limited").into_response()
         }
         Err(error) => registration_error(error).into_response(),
+    }
+}
+
+/// Partial profile body: display name, city, and region are each optional,
+/// at least one is required, and nothing else is accepted.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct UpdateMeBody {
+    display_name: Option<String>,
+    city: Option<String>,
+    region: Option<String>,
+}
+
+/// Updated profile receipt: public fields only, never phone material.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct UpdateMeResponse {
+    account_id: uuid::Uuid,
+    display_name: String,
+    city: String,
+    region: String,
+    account_state: String,
+}
+
+/// Extract the session token from a `Cookie` header value, if present.
+fn session_token(headers: &HeaderMap) -> Option<String> {
+    let cookies = headers.get(axum::http::header::COOKIE)?.to_str().ok()?;
+    cookies.split(';').find_map(|pair| {
+        let (name, value) = pair.split_once('=')?;
+        if name.trim() == crate::http::auth::SESSION_COOKIE {
+            let token = value.trim().to_owned();
+            if token.is_empty() {
+                None
+            } else {
+                Some(token)
+            }
+        } else {
+            None
+        }
+    })
+}
+
+/// Same-host origin for this boundary's unsafe method: `Origin` (else
+/// `Referer`) must match the request's own host. This is the configuration-free
+/// subset of the session boundary's contract (`http::auth` adds the
+/// configured public origin); unifying both lands with the production merge.
+fn same_host_origin(headers: &HeaderMap) -> bool {
+    let origin = headers
+        .get(axum::http::header::ORIGIN)
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned)
+        .or_else(|| {
+            let referer = headers
+                .get(axum::http::header::REFERER)
+                .and_then(|value| value.to_str().ok())?;
+            let after_scheme = referer.split_once("://")?.1;
+            let host = after_scheme.split('/').next()?;
+            let scheme = referer.split_once("://")?.0;
+            Some(format!("{scheme}://{host}"))
+        });
+    match (
+        origin,
+        headers
+            .get(axum::http::header::HOST)
+            .and_then(|value| value.to_str().ok()),
+    ) {
+        (Some(origin), Some(host)) => {
+            origin == format!("http://{host}") || origin == format!("https://{host}")
+        }
+        _ => false,
+    }
+}
+
+/// Update the session owner's display name and default locality.
+///
+/// Authentication runs first (stale sessions answer 401), then the
+/// same-host origin check (403 `forbidden_origin`), then the update: only
+/// the user row changes plus one appended fact — never resource snapshots,
+/// policy history, or phone material.
+async fn update_me<S>(
+    State(state): State<AccountsState<S>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response
+where
+    S: VerificationProvider + Send + Sync,
+{
+    let token = match session_token(&headers) {
+        Some(token) => token,
+        None => return ApiError::new(Code::Unauthenticated, "no usable session").into_response(),
+    };
+    let account = match authenticate(&state.pool, &token).await {
+        Ok(Some(account)) => account,
+        Ok(None) => {
+            return ApiError::new(Code::Unauthenticated, "no usable session").into_response()
+        }
+        Err(_) => return ApiError::internal().into_response(),
+    };
+    if !same_host_origin(&headers) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "code": "forbidden_origin",
+                "message": "cross-origin request refused",
+            })),
+        )
+            .into_response();
+    }
+    let input: UpdateMeBody = match parse_body(&body) {
+        Ok(input) => input,
+        Err(error) => return error.into_response(),
+    };
+    match update_profile(
+        &state.pool,
+        account.user.id,
+        ProfileUpdate {
+            display_name: input.display_name,
+            city: input.city,
+            region: input.region,
+        },
+    )
+    .await
+    {
+        Ok(updated) => (
+            StatusCode::OK,
+            Json(UpdateMeResponse {
+                account_id: updated.id,
+                display_name: updated.display_name,
+                city: updated.city,
+                region: updated.region,
+                account_state: updated.state,
+            }),
+        )
+            .into_response(),
+        Err(ProfileError::InvalidField) => {
+            ApiError::new(Code::InvalidField, "profile fields are invalid").into_response()
+        }
+        Err(ProfileError::NotActive) => {
+            ApiError::new(Code::Unauthenticated, "no usable session").into_response()
+        }
+        Err(ProfileError::StorageFailed) => ApiError::internal().into_response(),
     }
 }
