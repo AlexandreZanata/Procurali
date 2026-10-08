@@ -43,6 +43,8 @@ pub mod application {
     pub mod register_user;
     /// Private request draft creation and editing for the owning author.
     pub mod request_drafts;
+    /// Request activation quotas: open slots and rolling successful counts.
+    pub mod request_limits;
     /// Session lifecycle: login after proof and current-state authentication.
     pub mod sessions;
     /// Owner profile editing: display name and default locality.
