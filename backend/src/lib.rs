@@ -27,6 +27,8 @@ pub mod application {
     pub mod idempotency;
     /// Phone-verification provider boundary with a restricted deterministic fake.
     pub mod phone_verification;
+    /// Minimal registration and phone-proof activation flows.
+    pub mod register_user;
 }
 
 /// SQLx repositories, migrations, pool, and transaction machinery.
@@ -47,6 +49,8 @@ pub mod persistence {
 
 /// Axum router, handlers, DTO allowlists, and structured errors.
 pub mod http {
+    /// Registration, challenge, and confirmation routes (pending to active).
+    pub mod accounts;
     /// Response allowlists and strict request bodies.
     pub mod dto;
     /// Structured errors: closed codes, exact statuses, secret-free messages.
