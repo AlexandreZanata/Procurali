@@ -23,6 +23,8 @@ pub mod domain {
 pub mod application {
     /// Effective-time port: production system clock vs frozen test clocks.
     pub mod clock;
+    /// Durable per-action deduplication (same key/body replays, changed body conflicts).
+    pub mod idempotency;
 }
 
 /// SQLx repositories, migrations, pool, and transaction machinery.
