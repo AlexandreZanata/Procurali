@@ -63,6 +63,8 @@ pub mod application {
     pub mod request_eligibility;
     /// Request activation quotas: open slots and rolling successful counts.
     pub mod request_limits;
+    /// Request-driven offer cascades: demand moves, live offers follow.
+    pub mod request_offer_cascades;
     /// Owner request reads: bounded lists and details with truthful actions.
     pub mod request_reads;
     /// Request revisions: material classification with preserved history.
