@@ -77,6 +77,8 @@ pub mod persistence {
     pub mod migrations;
     /// In-product per-recipient notices with scoped acknowledgment.
     pub mod notices;
+    /// Offer slots and immutable terms over recorded facts.
+    pub mod offers;
     /// Phone-change history readers over recorded facts.
     pub mod phone_history;
     /// Bounded pools, redacted handling, and liveness probes.
