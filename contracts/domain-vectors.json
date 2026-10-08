@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "note": "Synthetic vectors only. Expected values written independently of implementation. Money form: ^\\d+(\\.\\d{1,2})?$. Deadlines are exclusive: equal-to is denied.",
+  "money": {
+    "valid": [
+      { "input": "600.00", "cents": 60000 },
+      { "input": "600", "cents": 60000 },
+      { "input": "520.00", "cents": 52000 },
+      { "input": "520.0", "cents": 52000 },
+      { "input": "0.01", "cents": 1 },
+      { "input": "1.10", "cents": 110 },
+      { "input": "9999999.99", "cents": 999999999 }
+    ],
+    "invalid": [
+      { "input": "600.001", "reason": "overprecision" },
+      { "input": "0.00", "reason": "nonpositive_amount" },
+      { "input": "0", "reason": "nonpositive_amount" },
+      { "input": "-5.00", "reason": "nonpositive_amount" },
+      { "input": "1e3", "reason": "malformed_amount" },
+      { "input": "1E3", "reason": "malformed_amount" },
+      { "input": "NaN", "reason": "malformed_amount" },
+      { "input": "", "reason": "missing_field" },
+      { "input": " 520.00", "reason": "malformed_amount" },
+      { "input": "520.00 ", "reason": "malformed_amount" },
+      { "input": ".50", "reason": "malformed_amount" },
+      { "input": "520.", "reason": "malformed_amount" },
+      { "input": "+520.00", "reason": "malformed_amount" },
+      { "input": "520,00", "reason": "malformed_amount" },
+      { "input": "R$ 520.00", "reason": "malformed_amount" }
+    ]
+  },
+  "deadlines": {
+    "deadline": "2026-10-15T12:00:00Z",
+    "cases": [
+      { "at": "2026-10-15T11:59:59Z", "eligible": true },
+      { "at": "2026-10-15T12:00:00Z", "eligible": false },
+      { "at": "2026-10-15T12:00:01Z", "eligible": false }
+    ],
+    "instant_format": "RFC3339 UTC with explicit offset (e.g. 2026-10-15T12:00:00Z)",
+    "invalid_instants": ["15/10/2026", "2026-10-15 12:00:00", "2026-10-15", "not-a-time"]
+  },
+  "text": {
+    "limits": {
+      "request_title": 120,
+      "offer_description": 120,
+      "request_note": 500,
+      "offer_note": 500,
+      "display_name": 80,
+      "report_details": 1000
+    },
+    "counting": "unicode_scalar_values",
+    "vectors": [
+      { "input": "cafe", "scalars": 4 },
+      { "input": "café", "scalars": 4 },
+      { "input": "🧊 refrigerator", "scalars": 14 },
+      { "input": "é", "scalars": 2, "note": "e + combining acute (U+0301) are two scalar values" }
+    ]
+  },
+  "quotas": {
+    "open_requests_per_account": { "allowed": 3, "refused_at": 4 },
+    "activations_per_rolling_24h": { "allowed": 6, "refused_at": 7 },
+    "offer_submissions_per_rolling_24h": { "allowed": 10, "refused_at": 11 },
+    "material_revisions_per_rolling_24h": { "allowed": 3, "refused_at": 4 }
+  },
+  "errors": {
+    "codes": [
+      "missing_field",
+      "invalid_field",
+      "malformed_amount",
+      "nonpositive_amount",
+      "overprecision",
+      "text_too_long",
+      "unknown_city",
+      "unknown_category",
+      "retired_category",
+      "prohibited_category",
+      "expired",
+      "quota_exceeded",
+      "duplicate_intent",
+      "forbidden_owner",
+      "forbidden_role",
+      "forbidden_state",
+      "conflict_revision",
+      "idempotency_key_reuse",
+      "unauthenticated",
+      "verification_failed",
+      "rate_limited"
+    ],
+    "shape": {
+      "code": "string (stable, from this list)",
+      "message": "string (human-readable, never a secret or phone number)",
+      "fields": "optional map of field name to one code above"
+    }
+  }
+}
