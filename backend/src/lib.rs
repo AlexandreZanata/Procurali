@@ -21,4 +21,6 @@ pub mod http {}
 pub mod operations {
     /// Validated runtime configuration (no default secrets, redacted output).
     pub mod config;
+    /// Redacted structured observability (typed fields only, no secret channels).
+    pub mod telemetry;
 }
