@@ -177,18 +177,16 @@ impl Settings {
             return Err(ConfigError::invalid("PHONE_PROVIDER"));
         }
 
-        let twilio_account_sid;
-        let twilio_auth_token;
-        let twilio_verify_service_sid;
-        if phone_provider == PhoneProvider::Twilio {
-            twilio_account_sid = Some(Secret(required("TWILIO_ACCOUNT_SID")?));
-            twilio_auth_token = Some(Secret(required("TWILIO_AUTH_TOKEN")?));
-            twilio_verify_service_sid = Some(Secret(required("TWILIO_VERIFY_SERVICE_SID")?));
-        } else {
-            twilio_account_sid = None;
-            twilio_auth_token = None;
-            twilio_verify_service_sid = None;
-        }
+        let (twilio_account_sid, twilio_auth_token, twilio_verify_service_sid) =
+            if phone_provider == PhoneProvider::Twilio {
+                (
+                    Some(Secret(required("TWILIO_ACCOUNT_SID")?)),
+                    Some(Secret(required("TWILIO_AUTH_TOKEN")?)),
+                    Some(Secret(required("TWILIO_VERIFY_SERVICE_SID")?)),
+                )
+            } else {
+                (None, None, None)
+            };
 
         let session_key = Secret(required("SESSION_KEY")?);
         if environment == Environment::Production
