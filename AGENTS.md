@@ -17,7 +17,11 @@ These instructions apply throughout this repository. Follow additional `AGENTS.m
 - Keep basic buyer/seller participation free and buyer-controlled WhatsApp contact private until the authorized handoff.
 - Preserve the difference between contact initiation, observed feedback, declared resolution, and a verified transaction.
 - Preserve explicit MVP/post-MVP/future boundaries.
-- The current phase is business specification and documentation organization. A documentation task does not authorize selecting technologies, writing application code, or designing screens.
+- The current phase is explicit MVP implementation on the `codex/backend-mvp` construction
+  branch, executed one microtask at a time under the private backend-mvp execution plan
+  (kept in `.local/`, never published). Business documents under `docs/` remain canonical:
+  task cards specify implementation work and verification; they cannot silently change a
+  business rule.
 - When implementation is explicitly requested later, record technical decisions separately and keep business behavior traceable to its specification.
 
 ## Maintain the repository

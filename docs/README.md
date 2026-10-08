@@ -96,6 +96,15 @@ For every behavior change, also inspect the relevant entries in [edge cases](qua
 - [Changelog](maintenance/changelog.md): Significant document and behavior changes.
 - [Decision records](decisions/README.md): How to record new consequential decisions without duplicating the baseline.
 
+## Engineering implementation notes
+
+These documents constrain implementation shape only. Business behavior stays canonical
+in the topic files above; engineering files never copy or override business rules.
+
+- [Architecture](engineering/architecture.md): Proposed module boundaries, runtime, and data conventions.
+- [Dependencies](engineering/dependencies.md): Planned stable pins and their official sources.
+- [Stack decision](engineering/decisions/DEC-0001-stack.md): Proposed implementation-stack choice and rationale.
+
 ### Templates
 
 - [Topic document](templates/topic-document.md).

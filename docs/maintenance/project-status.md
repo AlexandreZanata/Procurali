@@ -1,7 +1,7 @@
 # Project status
 
-**Updated:** October 7, 2026  
-**Phase:** Business specification and documentation organization  
+**Updated:** October 8, 2026  
+**Phase:** Implementation planning contracts (construction branch `codex/backend-mvp`, planning phase P00 in progress)  
 **Business baseline:** Recommended version 1.1
 
 ## Available artifacts
@@ -13,9 +13,12 @@
 
 ## Implementation status
 
-No application implementation, chosen technology stack, infrastructure design, database schema, visual screen design, deployment, or passing application test suite is established by this repository's current documentation.
+No application implementation, infrastructure design, database schema, visual screen
+design, deployment, or passing application test suite is established yet. Execution
+contracts and dependency pins are being recorded on the construction branch; application
+code starts with the skeleton phase after the planning contracts complete.
 
-Specifications describe intended behavior. Unchecked readiness items are not evidence of completion. The next implementation phase must be explicitly requested; selecting a technology is not part of documentation organization.
+Specifications describe intended behavior. Unchecked readiness items are not evidence of completion.
 
 ## Open operational choices before public launch
 

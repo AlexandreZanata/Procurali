@@ -829,6 +829,48 @@
       "related": [
         "maintenance/agent-workflow.md"
       ]
+    },
+    {
+      "id": "ENG-ARCH",
+      "path": "engineering/architecture.md",
+      "title": "Engineering architecture baseline",
+      "kind": "engineering",
+      "status": "proposed",
+      "scope": "mvp",
+      "source_sections": [],
+      "summary": "Proposed module boundaries, runtime, and data conventions; implementation shape only",
+      "related": [
+        "engineering/dependencies.md",
+        "engineering/decisions/DEC-0001-stack.md"
+      ]
+    },
+    {
+      "id": "ENG-DEPS",
+      "path": "engineering/dependencies.md",
+      "title": "Engineering dependencies",
+      "kind": "engineering",
+      "status": "proposed",
+      "scope": "mvp",
+      "source_sections": [],
+      "summary": "Planned stable pins and official sources; exact versions locked by later build manifests",
+      "related": [
+        "engineering/architecture.md",
+        "engineering/decisions/DEC-0001-stack.md"
+      ]
+    },
+    {
+      "id": "ENG-DEC-0001",
+      "path": "engineering/decisions/DEC-0001-stack.md",
+      "title": "Stack decision record",
+      "kind": "engineering",
+      "status": "proposed",
+      "scope": "mvp",
+      "source_sections": [],
+      "summary": "Proposed implementation-stack choice, options, rationale, and follow-through",
+      "related": [
+        "engineering/architecture.md",
+        "engineering/dependencies.md"
+      ]
     }
   ]
 }
