@@ -4,6 +4,11 @@
 //! implementation against it at runtime (path relative to `backend/`).
 
 use procurali_backend::domain::money::{Money, MoneyError};
+use procurali_backend::domain::{
+    condition::{OfferCondition, RequestCondition},
+    location::{CategoryId, CityId, Locality, RegionId},
+    text::{normalize_for_comparison, same_need, TextKind},
+};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -108,4 +113,97 @@ fn overflow_and_malformed_inputs_fail_explicitly_without_panic() {
         "600.00"
     );
     assert_eq!(Money::parse("0.01").expect("cent parses").format(), "0.01");
+}
+
+#[test]
+fn condition_acceptance_follows_inv20() {
+    let used_only = RequestCondition::parse("used").expect("used parses");
+    let new_only = RequestCondition::parse("new").expect("new parses");
+    let either = RequestCondition::parse("either").expect("either parses");
+    assert!(used_only.accepts(OfferCondition::Used));
+    assert!(!used_only.accepts(OfferCondition::New));
+    assert!(new_only.accepts(OfferCondition::New));
+    assert!(!new_only.accepts(OfferCondition::Used));
+    assert!(either.accepts(OfferCondition::New));
+    assert!(either.accepts(OfferCondition::Used));
+    for bad in ["", "New", "USED", "both", "new-only", "either "] {
+        assert!(
+            RequestCondition::parse(bad).is_err(),
+            "{bad:?} is refused without guessing"
+        );
+    }
+    for bad in ["", "New", "refurbished"] {
+        assert!(
+            OfferCondition::parse(bad).is_err(),
+            "{bad:?} is refused without guessing"
+        );
+    }
+}
+
+#[test]
+fn text_bounds_and_duplicates_follow_frozen_rules() {
+    let contract_text = contract()["text"].clone();
+    let limits = contract_text["limits"].as_object().expect("limits");
+    for kind in [
+        TextKind::RequestTitle,
+        TextKind::OfferDescription,
+        TextKind::Note,
+        TextKind::DisplayName,
+        TextKind::ReportDetails,
+    ] {
+        let expected = limits[kind.contract_key()]
+            .as_u64()
+            .expect("contract bound") as usize;
+        assert_eq!(kind.limit(), expected, "bound matches contract");
+        assert!(kind.check_length(&"x".repeat(expected)).is_ok());
+        assert!(kind.check_length(&"x".repeat(expected + 1)).is_err());
+    }
+    for vector in contract_text["vectors"].as_array().expect("vectors") {
+        let input = vector["input"].as_str().expect("input");
+        let scalars = vector["scalars"].as_u64().expect("count") as usize;
+        assert_eq!(input.chars().count(), scalars, "scalar count holds");
+    }
+    // Whitespace/case duplicates match; meaningful words survive.
+    assert!(same_need(
+        "  Geladeira Consul 340L ",
+        "geladeira consul 340l"
+    ));
+    assert!(same_need("Fogão\t4 Bocas\n", "fogão 4 bocas"));
+    assert!(!same_need("Geladeira Consul 340L", "Geladeira Consul"));
+    assert!(!same_need("Geladeira", "Fogão"));
+    assert!(!same_need("", ""));
+    assert!(!same_need("   ", "Geladeira"));
+    assert_eq!(normalize_for_comparison("  A  B "), "a b");
+}
+
+#[test]
+fn locality_identity_is_by_value_not_label() {
+    let springfield_a = Locality::new(
+        CityId::parse("springfield-a").expect("city parses"),
+        RegionId::parse("downtown").expect("region parses"),
+    );
+    let springfield_b = Locality::new(
+        CityId::parse("springfield-b").expect("city parses"),
+        RegionId::parse("downtown").expect("region parses"),
+    );
+    // Same region label, different cities: different localities.
+    assert_ne!(springfield_a, springfield_b);
+    assert!(!Locality::satisfies_scope(&springfield_a, &springfield_b));
+    // Identical snapshot satisfies its own scope.
+    assert!(Locality::satisfies_scope(&springfield_a, &springfield_a));
+    // Same city, different region: different localities.
+    let other_region = Locality::new(
+        CityId::parse("springfield-a").expect("city parses"),
+        RegionId::parse("uptown").expect("region parses"),
+    );
+    assert_ne!(springfield_a, other_region);
+    // Codes trim; empties and overlong codes are refused.
+    assert_eq!(CityId::parse("  sp-01 ").expect("trims").as_str(), "sp-01");
+    assert!(CityId::parse("").is_err());
+    assert!(CityId::parse(&"x".repeat(65)).is_err());
+    assert!(RegionId::parse("").is_err());
+    // One category per need: the type holds exactly one value.
+    let category = CategoryId::parse("refrigerators").expect("category parses");
+    assert_eq!(category.as_str(), "refrigerators");
+    assert!(CategoryId::parse("").is_err());
 }

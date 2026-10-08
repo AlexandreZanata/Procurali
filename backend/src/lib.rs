@@ -7,8 +7,14 @@
 
 /// Pure value types and rules (money, clock, text, locality). No I/O.
 pub mod domain {
+    /// New/used acceptance and offer terms without synonyms.
+    pub mod condition;
+    /// Opaque stable city/region/category identities compared by value.
+    pub mod location;
     /// Exact BRL money: integer cents inside, decimal strings on the wire.
     pub mod money;
+    /// Canonical bounds and mechanical duplicate normalization.
+    pub mod text;
     /// UTC instants, exclusive deadlines, rolling windows. No clock reads.
     pub mod time;
 }
