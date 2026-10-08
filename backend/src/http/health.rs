@@ -56,3 +56,23 @@ pub async fn readiness(
 fn readiness_body() -> Value {
     json!({"status": "not_ready", "unavailable": ["database"]})
 }
+
+/// Live pool-backed readiness: one `SELECT 1` through the pool.
+///
+/// Success renders the exact ready body; any failure renders the exact
+/// not-ready body with the dependency name only — never a connection value.
+/// This handler is wired to routes by a later card; tests exercise it through
+/// a test-local router against real databases.
+pub async fn probe_pool(
+    axum::extract::State(pool): axum::extract::State<sqlx::PgPool>,
+) -> impl IntoResponse {
+    if crate::persistence::pool::probe(&pool).await.is_ok() {
+        (
+            StatusCode::OK,
+            Json(json!({"status": "ready", "unavailable": []})),
+        )
+            .into_response()
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, Json(readiness_body())).into_response()
+    }
+}

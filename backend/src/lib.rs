@@ -15,6 +15,8 @@ pub mod application {}
 pub mod persistence {
     /// Compile-time migration journal and append-only runner.
     pub mod migrations;
+    /// Bounded pools, redacted handling, and liveness probes.
+    pub mod pool;
 }
 
 /// Axum router, handlers, DTO allowlists, and structured errors.

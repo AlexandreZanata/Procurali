@@ -5,11 +5,14 @@
 //! non-disposable URL fails loudly — database absence is an error, never a skip.
 //! Each test owns a freshly created database, so parallel execution is safe.
 
+use procurali_backend::http::health::probe_pool;
 use procurali_backend::persistence::migrations;
+use procurali_backend::persistence::pool::{connect_disposable, probe, PoolConfig, PoolError};
 use sqlx::{PgPool, Row};
+use std::time::{Duration, Instant};
 
-/// This file's queryset: every name starts with `procurali_test_p02t03_`.
-const DISPOSABLE_PREFIX: &str = "procurali_test_p02t03_";
+/// This file's queryset: every name starts with `procurali_test_`.
+const DISPOSABLE_PREFIX: &str = "procurali_test_";
 
 fn test_base_url() -> String {
     let url = std::env::var("TEST_DATABASE_URL").expect(
@@ -65,6 +68,23 @@ async fn journal_versions(pool: &PgPool) -> Vec<i64> {
         .into_iter()
         .map(|row| row.get::<i64, _>("version"))
         .collect()
+}
+
+/// Pool against a freshly migrated database with caller-chosen limits.
+async fn fresh_pool(name: &str, configure: impl FnOnce(&mut PoolConfig)) -> PgPool {
+    let seed = fresh_migrated_database(name).await;
+    seed.close().await;
+    open_pool(name, configure).await
+}
+
+/// Pool against an already-migrated database: connects only, never recreates.
+async fn open_pool(name: &str, configure: impl FnOnce(&mut PoolConfig)) -> PgPool {
+    let url = test_base_url();
+    let mut config = PoolConfig::default();
+    configure(&mut config);
+    connect_disposable(&url_with_database(&url, name), &config)
+        .await
+        .expect("bounded pool connects")
 }
 
 /// Version nibble (first char of the third UUID group) must be '7'.
@@ -165,5 +185,133 @@ async fn failing_migration_leaves_no_partial_version() {
         .expect("schema introspection");
         assert_eq!(count, 0, "no partial objects from the failed version");
     }
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn new_connection_reads_persisted_foundation_data() {
+    let writer = fresh_pool("procurali_test_p02t04_reload", |_| {}).await;
+    let written: String =
+        sqlx::query_scalar("INSERT INTO foundation_ids DEFAULT VALUES RETURNING id::text")
+            .fetch_one(&writer)
+            .await
+            .expect("foundation row writes");
+    writer.close().await;
+
+    // A brand-new connection (separate pool) observes the persisted fact.
+    let reader = open_pool("procurali_test_p02t04_reload", |_| {}).await;
+    let seen: Vec<String> =
+        sqlx::query_scalar("SELECT id::text FROM foundation_ids ORDER BY recorded_at")
+            .fetch_all(&reader)
+            .await
+            .expect("foundation rows read through a new connection");
+    assert_eq!(seen, vec![written]);
+    reader.close().await;
+}
+
+#[tokio::test]
+async fn unavailable_db_fails_readiness_and_connect() {
+    // Valid disposable shape, nothing listening: deterministic typed failure.
+    let dead_url =
+        "postgres://procurali_test:canary-dead-pw@127.0.0.1:55999/procurali_test_p02t04_dead";
+    let config = PoolConfig {
+        acquire_timeout: Duration::from_secs(2),
+        ..PoolConfig::default()
+    };
+    let error = connect_disposable(dead_url, &config)
+        .await
+        .expect_err("unreachable database must fail");
+    assert_eq!(error, PoolError::ConnectionFailed);
+    let rendered = format!("{error:?} {error}");
+    assert!(!rendered.contains("canary-dead-pw"));
+
+    // The pool-backed readiness handler reports the outage with names only.
+    let lazy = PgPool::connect_lazy(dead_url).expect("lazy pool builds");
+    let app = axum::Router::new()
+        .route("/ready", axum::routing::get(probe_pool))
+        .with_state(lazy);
+    let response = tower::ServiceExt::oneshot(
+        app,
+        axum::http::Request::get("/ready")
+            .body(axum::body::Body::empty())
+            .expect("test request builds"),
+    )
+    .await
+    .expect("readiness responds");
+    assert_eq!(
+        response.status(),
+        axum::http::StatusCode::SERVICE_UNAVAILABLE
+    );
+    let body = axum::body::to_bytes(response.into_body(), 1024)
+        .await
+        .expect("body reads");
+    assert_eq!(
+        body.as_ref(),
+        br#"{"status":"not_ready","unavailable":["database"]}"#
+    );
+}
+
+#[tokio::test]
+async fn refusals_carry_no_secrets() {
+    // Guard fires before any connection: no database needed for this proof.
+    let error = connect_disposable(
+        "postgres://someone:canary-app-pw@127.0.0.1:5432/procurali_dev",
+        &PoolConfig::default(),
+    )
+    .await
+    .expect_err("non-disposable database refused");
+    assert_eq!(error, PoolError::ForbiddenDatabase);
+    let rendered = format!("{error:?} {error}");
+    assert!(!rendered.contains("canary-app-pw"));
+    assert!(!rendered.contains("procurali_dev"));
+}
+
+#[tokio::test]
+async fn exhausted_pool_is_bounded() {
+    let pool = fresh_pool("procurali_test_p02t04_saturation", |config| {
+        config.max_connections = 1;
+        config.acquire_timeout = Duration::from_secs(2);
+    })
+    .await;
+    // Hold the single connection for the whole test.
+    let held = pool.acquire().await.expect("first connection acquires");
+    let started = Instant::now();
+    let outcome = tokio::time::timeout(Duration::from_secs(15), pool.acquire()).await;
+    let waited = started.elapsed();
+    assert!(
+        waited < Duration::from_secs(10),
+        "exhaustion surfaced in bounds ({waited:?}), never hangs"
+    );
+    assert!(
+        outcome.expect("outer guard intact").is_err(),
+        "second acquisition fails instead of false success"
+    );
+    drop(held);
+    // The pool still serves after the pressure lifts.
+    probe(&pool).await.expect("pool recovers after saturation");
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn slow_query_is_bounded_by_statement_timeout() {
+    let pool = fresh_pool("procurali_test_p02t04_querybound", |_| {}).await;
+    let started = Instant::now();
+    let outcome = tokio::time::timeout(Duration::from_secs(25), async {
+        sqlx::query("SELECT pg_sleep(15)").execute(&pool).await
+    })
+    .await;
+    let elapsed = started.elapsed();
+    match outcome {
+        Ok(Err(_)) => {}
+        other => panic!("slow query must fail via statement timeout, got {other:?}"),
+    }
+    assert!(
+        elapsed >= Duration::from_secs(9),
+        "timeout fired after waiting, not instantly ({elapsed:?})"
+    );
+    assert!(
+        elapsed < Duration::from_secs(20),
+        "timeout fired in bounds ({elapsed:?})"
+    );
     pool.close().await;
 }
