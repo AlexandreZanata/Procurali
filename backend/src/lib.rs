@@ -49,6 +49,8 @@ pub mod application {
     pub mod recovery;
     /// Minimal registration and phone-proof activation flows.
     pub mod register_user;
+    /// Buyer decline: rejection as a comparison choice, never misconduct.
+    pub mod reject_offer;
     /// Owner removal: business concealment with immutable history.
     pub mod remove_request;
     /// Explicit renewal: fresh seven-day cycles from eligible demand.
@@ -69,6 +71,8 @@ pub mod application {
     pub mod submit_offer;
     /// Owner profile editing: display name and default locality.
     pub mod update_profile;
+    /// First buyer view: sent-to-viewed engagement with one conversion fact.
+    pub mod view_offer;
 }
 
 /// SQLx repositories, migrations, pool, and transaction machinery.
