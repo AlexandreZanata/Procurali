@@ -924,3 +924,352 @@ async fn repeated_publication_returns_the_existing_result() {
     );
     db.cleanup().await.expect("suite cleans up");
 }
+
+/// Publish one draft through the real publication route; return the receipt.
+async fn publish_draft(app: &axum::Router, cookie: &str, id: &str) -> (StatusCode, Value) {
+    call(
+        app.clone(),
+        "POST",
+        &format!("/api/v1/requests/drafts/{id}/publication"),
+        None,
+        Some(cookie),
+    )
+    .await
+}
+
+#[tokio::test]
+async fn owner_sees_draft_active_and_history_with_permitted_actions() {
+    let db = TestDatabase::create("p05t07_owner")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p05t07_owner_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let app = test_app(&db);
+    provision_active(&app, "+55 11 90000-0041", "Reads Owner").await;
+    let cookie = login_cookie(app.clone(), "+55 11 90000-0041").await;
+
+    let (status, draft) = call(
+        app.clone(),
+        "POST",
+        "/api/v1/requests/drafts",
+        Some(draft_body()),
+        Some(&cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let draft_id = draft["id"].as_str().expect("receipt carries id").to_owned();
+    let (status, created) = call(
+        app.clone(),
+        "POST",
+        "/api/v1/requests/drafts",
+        Some(draft_body()),
+        Some(&cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let publish_id = created["id"]
+        .as_str()
+        .expect("receipt carries id")
+        .to_owned();
+
+    // First publication is a creation; the repeat replays the same receipt.
+    let (status, published) = publish_draft(&app, &cookie, &publish_id).await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(published["state"], "active");
+    assert_eq!(published["cycle_number"], 1);
+    assert!(published["deadline"].is_string());
+    let (status, replayed) = publish_draft(&app, &cookie, &publish_id).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(replayed, published, "replay returns the existing receipt");
+
+    // The owner list carries both rows newest-first with truthful actions.
+    let (status, list) = call(app.clone(), "GET", "/api/v1/requests", None, Some(&cookie)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list["total"], 2);
+    let rows = list["requests"].as_array().expect("request list");
+    assert_eq!(rows.len(), 2);
+    let draft_row = rows
+        .iter()
+        .find(|row| row["id"] == draft_id)
+        .expect("draft row lists");
+    assert_eq!(draft_row["actions"], json!(["edit", "publish"]));
+    assert_eq!(draft_row["expired"], false);
+    assert!(draft_row["deadline"].is_null());
+    let active_row = rows
+        .iter()
+        .find(|row| row["id"] == publish_id)
+        .expect("active row lists");
+    assert_eq!(
+        active_row["actions"],
+        json!(["receive_offers", "start_contact"])
+    );
+    assert_eq!(active_row["expired"], false);
+    assert!(active_row["deadline"].is_string());
+    for row in rows {
+        let rendered = row.to_string();
+        for absent in ["author", "phone", "cipher", "token", "session"] {
+            assert!(!rendered.contains(absent), "no {absent} in owner list");
+        }
+    }
+
+    // Pagination is bounded and exact.
+    let (status, page) = call(
+        app.clone(),
+        "GET",
+        "/api/v1/requests?limit=1",
+        None,
+        Some(&cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(page["total"], 2);
+    assert_eq!(page["requests"].as_array().expect("page").len(), 1);
+    let (status, page) = call(
+        app.clone(),
+        "GET",
+        "/api/v1/requests?limit=1&offset=1",
+        None,
+        Some(&cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(page["requests"].as_array().expect("page").len(), 1);
+    for bad in ["?limit=0", "?limit=51", "?limit=many", "?offset=-1"] {
+        let (status, body) = call(
+            app.clone(),
+            "GET",
+            &format!("/api/v1/requests{bad}"),
+            None,
+            Some(&cookie),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{bad} refuses");
+        assert_eq!(body["code"], "invalid_field");
+    }
+
+    // Details carry cycles and revisions: the active row has one of each
+    // with the requirement snapshot; the draft has neither.
+    let (status, detail) = call(
+        app.clone(),
+        "GET",
+        &format!("/api/v1/requests/{publish_id}"),
+        None,
+        Some(&cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        detail["actions"],
+        json!(["receive_offers", "start_contact"])
+    );
+    assert_eq!(detail["cycles"].as_array().expect("cycles").len(), 1);
+    assert_eq!(detail["cycles"][0]["cycle_number"], 1);
+    assert_eq!(detail["cycles"][0]["deadline"], published["deadline"]);
+    assert_eq!(detail["revisions"].as_array().expect("revisions").len(), 1);
+    assert_eq!(detail["revisions"][0]["title"], "Refrigerator");
+    assert_eq!(detail["revisions"][0]["budget"], "520.00");
+    let (status, detail) = call(
+        app.clone(),
+        "GET",
+        &format!("/api/v1/requests/{draft_id}"),
+        None,
+        Some(&cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(detail["actions"], json!(["edit", "publish"]));
+    assert!(detail["cycles"].as_array().expect("cycles").is_empty());
+    assert!(detail["revisions"]
+        .as_array()
+        .expect("revisions")
+        .is_empty());
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn strangers_cannot_inspect_owner_requests_or_publish_them() {
+    let db = TestDatabase::create("p05t07_stranger")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p05t07_stranger_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let app = test_app(&db);
+    provision_active(&app, "+55 11 90000-0042", "List Owner").await;
+    let owner_cookie = login_cookie(app.clone(), "+55 11 90000-0042").await;
+    provision_active(&app, "+55 11 90000-0043", "List Stranger").await;
+    let stranger_cookie = login_cookie(app.clone(), "+55 11 90000-0043").await;
+
+    let (status, draft) = call(
+        app.clone(),
+        "POST",
+        "/api/v1/requests/drafts",
+        Some(draft_body()),
+        Some(&owner_cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let draft_id = draft["id"].as_str().expect("receipt carries id").to_owned();
+    let (status, published) = publish_draft(&app, &owner_cookie, &draft_id).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let active_id = published["id"]
+        .as_str()
+        .expect("receipt carries id")
+        .to_owned();
+
+    // The stranger's own list is empty and every owner row is a 404: the
+    // same refusal as a missing row, with no existence oracle.
+    let (status, list) = call(
+        app.clone(),
+        "GET",
+        "/api/v1/requests",
+        None,
+        Some(&stranger_cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list["total"], 0);
+    assert!(list["requests"].as_array().expect("list").is_empty());
+    for id in [&draft_id, &active_id] {
+        let (status, body) = call(
+            app.clone(),
+            "GET",
+            &format!("/api/v1/requests/{id}"),
+            None,
+            Some(&stranger_cookie),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(body["code"], "not_found");
+    }
+    // Publishing another owner's draft is refused the same privacy-safe way,
+    // and anonymous readers share one refusal on every read.
+    let (status, body) = publish_draft(&app, &stranger_cookie, &draft_id).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["code"], "not_found");
+    for path in [
+        "/api/v1/requests".to_owned(),
+        format!("/api/v1/requests/{active_id}"),
+    ] {
+        let (status, body) = call(app.clone(), "GET", &path, None, None).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(body["code"], "unauthenticated");
+    }
+
+    // The owner's view is untouched by every stranger attempt.
+    let (status, list) = call(
+        app.clone(),
+        "GET",
+        "/api/v1/requests",
+        None,
+        Some(&owner_cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list["total"], 1);
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn elapsed_active_row_has_no_offer_or_contact_action() {
+    let db = TestDatabase::create("p05t07_elapsed")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p05t07_elapsed_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let app = test_app(&db);
+    provision_active(&app, "+55 11 90000-0044", "Elapsed Owner").await;
+    let cookie = login_cookie(app.clone(), "+55 11 90000-0044").await;
+
+    let (status, draft) = call(
+        app.clone(),
+        "POST",
+        "/api/v1/requests/drafts",
+        Some(draft_body()),
+        Some(&cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let id = draft["id"].as_str().expect("receipt carries id").to_owned();
+    let (status, _) = publish_draft(&app, &cookie, &id).await;
+    assert_eq!(status, StatusCode::CREATED);
+
+    // The cycle elapses while the recorded lifecycle lags: reads already
+    // derive expiry from the deadline, so no offer/contact action remains.
+    // The start moves back with the deadline to honor the cycle CHECK.
+    let now = chrono::Utc::now();
+    sqlx::query(
+        "UPDATE request_cycles SET started_at = $2, deadline = $3
+         WHERE request_id = $1 AND cycle_number = 1",
+    )
+    .bind(id.parse::<uuid::Uuid>().expect("id parses"))
+    .bind(now - chrono::Duration::days(8))
+    .bind(now - chrono::Duration::days(1))
+    .execute(db.pool())
+    .await
+    .expect("synthetic expiry applies");
+    let (status, detail) = call(
+        app.clone(),
+        "GET",
+        &format!("/api/v1/requests/{id}"),
+        None,
+        Some(&cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(detail["state"], "active", "recorded state lags behind time");
+    assert_eq!(detail["expired"], true, "expiry derives from the deadline");
+    assert!(
+        detail["actions"].as_array().expect("actions").is_empty(),
+        "elapsed rows carry no offer or contact action"
+    );
+    let (status, list) = call(app.clone(), "GET", "/api/v1/requests", None, Some(&cookie)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list["requests"][0]["actions"], json!([]));
+
+    // A prohibited category disables contact immediately on live rows.
+    let (status, draft) = call(
+        app.clone(),
+        "POST",
+        "/api/v1/requests/drafts",
+        Some(draft_body()),
+        Some(&cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let live = draft["id"].as_str().expect("receipt carries id").to_owned();
+    let (status, _) = publish_draft(&app, &cookie, &live).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let mut tx = db.pool().begin().await.expect("transaction begins");
+    procurali_backend::persistence::catalogs::set_category_status(
+        &mut tx,
+        "home_appliances",
+        procurali_backend::persistence::catalogs::CategoryStatus::Prohibited,
+    )
+    .await
+    .expect("category prohibits");
+    tx.commit().await.expect("transition commits");
+    let (status, detail) = call(
+        app.clone(),
+        "GET",
+        &format!("/api/v1/requests/{live}"),
+        None,
+        Some(&cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(detail["expired"], false);
+    assert!(
+        detail["actions"].as_array().expect("actions").is_empty(),
+        "prohibited rows carry no offer or contact action"
+    );
+    db.cleanup().await.expect("suite cleans up");
+}

@@ -47,6 +47,8 @@ pub mod application {
     pub mod request_drafts;
     /// Request activation quotas: open slots and rolling successful counts.
     pub mod request_limits;
+    /// Owner request reads: bounded lists and details with truthful actions.
+    pub mod request_reads;
     /// Session lifecycle: login after proof and current-state authentication.
     pub mod sessions;
     /// Owner profile editing: display name and default locality.

@@ -1,13 +1,19 @@
-//! Request-draft HTTP boundary: owner-only creation, reads, and edits.
+//! Owner request HTTP boundary: drafts, publication, lists, and details.
 //!
 //! Routes: `POST /api/v1/requests/drafts` saves a private draft (201);
 //! `GET /api/v1/requests/drafts/:id` returns the owner's draft (200);
-//! `PUT /api/v1/requests/drafts/:id` replaces its requirements (200).
-//! Drafts never appear here for strangers: missing, non-owned, and advanced
-//! rows share one 404, and anonymous callers share one 401. Bodies are
-//! closed (`deny_unknown_fields`): author, state, cycle, timestamp, phone, or
-//! any other overposted key is a 400. Responses carry requirements plus
-//! lifecycle state only — no author echo, no phone material.
+//! `PUT /api/v1/requests/drafts/:id` replaces its requirements (200);
+//! `POST /api/v1/requests/drafts/:id/publication` publishes it into its
+//! first seven-day cycle (201, or 200 replaying an existing publication);
+//! `GET /api/v1/requests` lists the owner's requests newest-first with
+//! derived timing and permitted actions (200);
+//! `GET /api/v1/requests/:id` returns one owned request with its cycles and
+//! revisions (200).
+//! Missing, non-owned, and advanced rows share one 404, and anonymous
+//! callers share one 401: strangers learn nothing. Draft bodies are closed
+//! (`deny_unknown_fields`): author, state, cycle, timestamp, phone, or any
+//! other overposted key is a 400. Responses carry requirements, lifecycle,
+//! timing, and permitted actions only — no author echo, no phone material.
 //!
 //! Authentication reuses current-state sessions (stale sessions answer 401);
 //! unsafe methods share the same-host origin contract as the account boundary
@@ -18,18 +24,21 @@
 
 use axum::{
     body::Bytes,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post, put},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use super::errors::{ApiError, Code};
+use crate::application::publish_request::{publish_request, PublishError, PublishedRequest};
 use crate::application::request_drafts::{
     create_draft, edit_draft, get_draft, DraftError, DraftInput,
 };
+use crate::application::request_reads::{get_request, list_requests, ReadError};
 use crate::application::sessions::authenticate;
 use crate::domain::money::MoneyError;
 
@@ -48,13 +57,17 @@ impl RequestsState {
     }
 }
 
-/// Mount the draft routes under `/api/v1` for tests and, later, the
-/// production router merge.
+/// Mount the request routes under `/api/v1` for tests and, later, the
+/// production router merge. The static `/drafts` segments take precedence
+/// over the `{id}` captures at the same position.
 pub fn routes(state: RequestsState) -> Router {
     Router::new()
         .route("/api/v1/requests/drafts", post(create))
         .route("/api/v1/requests/drafts/{id}", get(read))
         .route("/api/v1/requests/drafts/{id}", put(edit))
+        .route("/api/v1/requests/drafts/{id}/publication", post(publish))
+        .route("/api/v1/requests", get(list))
+        .route("/api/v1/requests/{id}", get(detail))
         .with_state(state)
 }
 
@@ -99,6 +112,143 @@ fn receipt(draft: crate::application::request_drafts::Draft) -> DraftResponse {
         region_code: draft.region_code,
         notes: draft.notes,
         state: draft.state,
+    }
+}
+
+/// Owner request receipt: requirements, derived timing, and the permitted
+/// actions for the current account, category, and time.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct SummaryResponse {
+    id: uuid::Uuid,
+    title: String,
+    category_code: String,
+    budget: String,
+    condition: String,
+    city_code: String,
+    region_code: String,
+    notes: String,
+    state: String,
+    cycle_number: i32,
+    revision_number: i32,
+    original_published_at: Option<chrono::DateTime<chrono::Utc>>,
+    deadline: Option<chrono::DateTime<chrono::Utc>>,
+    expired: bool,
+    actions: Vec<&'static str>,
+}
+
+/// One activation cycle for owner history.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct CycleResponse {
+    cycle_number: i32,
+    started_at: chrono::DateTime<chrono::Utc>,
+    deadline: chrono::DateTime<chrono::Utc>,
+}
+
+/// One requirement revision for owner history.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct RevisionResponse {
+    revision_number: i32,
+    title: String,
+    category_code: String,
+    budget: String,
+    condition: String,
+    city_code: String,
+    region_code: String,
+    notes: String,
+}
+
+/// Owner detail: the summary flattened with its cycles and revisions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct DetailResponse {
+    #[serde(flatten)]
+    summary: SummaryResponse,
+    cycles: Vec<CycleResponse>,
+    revisions: Vec<RevisionResponse>,
+}
+
+/// Bounded owner list with the total owned count.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct ListResponse {
+    requests: Vec<SummaryResponse>,
+    total: i64,
+}
+
+fn summary_response(summary: crate::application::request_reads::RequestSummary) -> SummaryResponse {
+    SummaryResponse {
+        id: summary.id,
+        title: summary.title,
+        category_code: summary.category_code,
+        budget: summary.budget,
+        condition: summary.condition,
+        city_code: summary.city_code,
+        region_code: summary.region_code,
+        notes: summary.notes,
+        state: summary.state,
+        cycle_number: summary.cycle_number,
+        revision_number: summary.revision_number,
+        original_published_at: summary.original_published_at,
+        deadline: summary.deadline,
+        expired: summary.expired,
+        actions: summary
+            .actions
+            .iter()
+            .map(|action| action.as_str())
+            .collect(),
+    }
+}
+
+fn read_error(error: ReadError) -> Response {
+    match error {
+        ReadError::NotActive => {
+            ApiError::new(Code::Unauthenticated, "no usable session").into_response()
+        }
+        ReadError::NotFound => ApiError::new(Code::NotFound, "request not found").into_response(),
+        ReadError::InvalidPage => {
+            ApiError::new(Code::InvalidField, "pagination is invalid").into_response()
+        }
+        ReadError::StorageFailed => ApiError::internal().into_response(),
+    }
+}
+
+fn publish_error(error: PublishError) -> Response {
+    match error {
+        PublishError::InvalidField(field) => {
+            ApiError::new(Code::InvalidField, "publication field is invalid")
+                .with_field(field, Code::InvalidField)
+                .into_response()
+        }
+        PublishError::InvalidAmount(error) => money_error(error).into_response(),
+        PublishError::UnknownCategory => {
+            ApiError::new(Code::UnknownCategory, "unknown category code").into_response()
+        }
+        PublishError::UnknownCity => {
+            ApiError::new(Code::UnknownCity, "unknown city code").into_response()
+        }
+        // No `unknown_region` or `disabled_city` registry entries exist; the
+        // refusals still name the exact requirement instead of inventing
+        // codes.
+        PublishError::UnknownRegion => ApiError::new(Code::InvalidField, "unknown region code")
+            .with_field("region_code", Code::InvalidField)
+            .into_response(),
+        PublishError::RetiredCategory => {
+            ApiError::new(Code::RetiredCategory, "category is retired").into_response()
+        }
+        PublishError::ProhibitedCategory => {
+            ApiError::new(Code::ProhibitedCategory, "category is prohibited").into_response()
+        }
+        PublishError::CityNotEnabled => ApiError::new(Code::InvalidField, "city is not enabled")
+            .with_field("city_code", Code::InvalidField)
+            .into_response(),
+        PublishError::NotActive => {
+            ApiError::new(Code::Unauthenticated, "no usable session").into_response()
+        }
+        PublishError::NotFound => {
+            ApiError::new(Code::NotFound, "request not found").into_response()
+        }
+        PublishError::ForbiddenState => {
+            ApiError::new(Code::ForbiddenState, "request cannot be published").into_response()
+        }
+        PublishError::StorageFailed => ApiError::internal().into_response(),
     }
 }
 
@@ -309,5 +459,143 @@ async fn edit(
     match edit_draft(&state.pool, user_id, id, draft_input(input)).await {
         Ok(draft) => (StatusCode::OK, Json(receipt(draft))).into_response(),
         Err(error) => draft_error(error),
+    }
+}
+
+/// Publish the owner's draft into its first seven-day cycle: 201 on first
+/// publication, 200 replaying an existing one. The status is decided from a
+/// best-effort pre-read; the receipt is always the current publication truth.
+async fn publish(
+    State(state): State<RequestsState>,
+    headers: HeaderMap,
+    Path(id): Path<uuid::Uuid>,
+) -> Response {
+    let user_id = match authenticated_user(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(error) => return error.into_response(),
+    };
+    if let Some(response) = origin_refused(&headers) {
+        return response;
+    }
+    let replay = matches!(
+        crate::persistence::requests::request(&state.pool, id).await,
+        Ok(Some(stored)) if stored.state == "active" && stored.author_id == user_id
+    );
+    match publish_request(&state.pool, user_id, id).await {
+        Ok(published) => published_response(published, replay),
+        Err(error) => publish_error(error),
+    }
+}
+
+fn published_response(published: PublishedRequest, replay: bool) -> Response {
+    let body = Json(serde_json::json!({
+        "id": published.id,
+        "title": published.title,
+        "category_code": published.category_code,
+        "budget": published.budget,
+        "condition": published.condition,
+        "city_code": published.city_code,
+        "region_code": published.region_code,
+        "notes": published.notes,
+        "state": published.state,
+        "cycle_number": published.cycle_number,
+        "revision_number": published.revision_number,
+        "original_published_at": published.original_published_at,
+        "deadline": published.deadline,
+    }));
+    if replay {
+        (StatusCode::OK, body).into_response()
+    } else {
+        (StatusCode::CREATED, body).into_response()
+    }
+}
+
+/// Parse one optional pagination value: absent means unset, present must be
+/// decimal digits. Parser failures are 400s with a stable shape, never the
+/// framework's plain-text rejection.
+fn pagination(params: &HashMap<String, String>, key: &str) -> Result<Option<u32>, ApiError> {
+    match params.get(key) {
+        None => Ok(None),
+        Some(raw) => raw
+            .parse::<u32>()
+            .map(Some)
+            .map_err(|_| ApiError::new(Code::InvalidField, "pagination is invalid")),
+    }
+}
+
+/// List the owner's requests newest-first with derived actions.
+async fn list(
+    State(state): State<RequestsState>,
+    headers: HeaderMap,
+    Query(params): Query<HashMap<String, String>>,
+) -> Response {
+    let user_id = match authenticated_user(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(error) => return error.into_response(),
+    };
+    let limit = match pagination(&params, "limit") {
+        Ok(limit) => limit,
+        Err(error) => return error.into_response(),
+    };
+    let offset = match pagination(&params, "offset") {
+        Ok(offset) => offset,
+        Err(error) => return error.into_response(),
+    };
+    // Unknown query keys are ignored: pagination names the only contract.
+    match list_requests(&state.pool, user_id, limit, offset).await {
+        Ok((summaries, total)) => (
+            StatusCode::OK,
+            Json(ListResponse {
+                requests: summaries.into_iter().map(summary_response).collect(),
+                total,
+            }),
+        )
+            .into_response(),
+        Err(error) => read_error(error),
+    }
+}
+
+/// Return one owned request with its cycles and revisions.
+async fn detail(
+    State(state): State<RequestsState>,
+    headers: HeaderMap,
+    Path(id): Path<uuid::Uuid>,
+) -> Response {
+    let user_id = match authenticated_user(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(error) => return error.into_response(),
+    };
+    match get_request(&state.pool, user_id, id).await {
+        Ok(detail) => (
+            StatusCode::OK,
+            Json(DetailResponse {
+                summary: summary_response(detail.summary),
+                cycles: detail
+                    .cycles
+                    .into_iter()
+                    .map(|cycle| CycleResponse {
+                        cycle_number: cycle.cycle_number,
+                        started_at: cycle.started_at,
+                        deadline: cycle.deadline,
+                    })
+                    .collect(),
+                revisions: detail
+                    .revisions
+                    .into_iter()
+                    .map(|revision| RevisionResponse {
+                        revision_number: revision.revision_number,
+                        title: revision.title,
+                        category_code: revision.category_code,
+                        budget: revision.budget,
+                        condition: revision.condition,
+                        city_code: revision.city_code,
+                        region_code: revision.region_code,
+                        notes: revision.notes,
+                    })
+                    .collect(),
+            }),
+        )
+            .into_response(),
+        Err(error) => read_error(error),
     }
 }
