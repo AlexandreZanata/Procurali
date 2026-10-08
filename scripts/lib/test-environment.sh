@@ -27,7 +27,8 @@ procurali_split_url() {
     *) return 1 ;;
   esac
   local rest="${url#*://}"
-  PROCURALI_URL_USER="${rest%%@*}"
+  local userinfo="${rest%%@*}"
+  PROCURALI_URL_USER="${userinfo%%:*}"
   local hostpart="${rest#*@}"
   [ "$hostpart" != "$rest" ] || return 1
   local hostport="${hostpart%%/*}"
