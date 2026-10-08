@@ -12,7 +12,10 @@ pub mod domain {}
 pub mod application {}
 
 /// SQLx repositories, migrations, pool, and transaction machinery.
-pub mod persistence {}
+pub mod persistence {
+    /// Compile-time migration journal and append-only runner.
+    pub mod migrations;
+}
 
 /// Axum router, handlers, DTO allowlists, and structured errors.
 pub mod http {
