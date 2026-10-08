@@ -31,6 +31,8 @@ pub mod application {
     pub mod idempotency;
     /// Phone-verification provider boundary with a restricted deterministic fake.
     pub mod phone_verification;
+    /// Declared professional classification, free and separate.
+    pub mod professional_profile;
     /// Account recovery and recycled-number review boundary.
     pub mod recovery;
     /// Minimal registration and phone-proof activation flows.
@@ -71,6 +73,8 @@ pub mod http {
     pub mod errors;
     /// Liveness/readiness probes over dependency flags (no values in output).
     pub mod health;
+    /// Professional-profile routes: free declaration and withdrawal.
+    pub mod profiles;
     /// Router with explicit size/time bounds and stable errors.
     pub mod router;
 }
