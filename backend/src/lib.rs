@@ -43,6 +43,8 @@ pub mod application {
     pub mod recovery;
     /// Minimal registration and phone-proof activation flows.
     pub mod register_user;
+    /// Explicit renewal: fresh seven-day cycles from eligible demand.
+    pub mod renew_request;
     /// Private request draft creation and editing for the owning author.
     pub mod request_drafts;
     /// Effective expiry: deadline eligibility and conditional expiration.
