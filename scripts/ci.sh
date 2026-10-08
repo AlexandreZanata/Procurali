@@ -34,6 +34,13 @@ echo "ci.sh: api tier"
 echo "ci.sh: privacy tier"
 "$REPO_ROOT/scripts/test.sh" privacy
 
+echo "ci.sh: integration tier (real PostgreSQL, disposable database)"
+if [ -z "${TEST_DATABASE_URL:-}" ]; then
+  echo "ci.sh: TEST_DATABASE_URL is required for the integration tier (no silent skip)" >&2
+  exit 1
+fi
+cargo test --test postgres_core
+
 echo "ci.sh: private-path guard"
 "$REPO_ROOT/scripts/check-private-paths.sh"
 

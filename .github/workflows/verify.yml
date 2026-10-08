@@ -14,6 +14,21 @@ jobs:
   skeleton:
     name: Skeleton checks (locked build, fmt, clippy, registered tiers)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        # Same pinned image+digest as local stacks (never `latest`).
+        image: postgres:18.6@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
+        env:
+          POSTGRES_USER: procurali_test
+          POSTGRES_PASSWORD: procurali-test-only-not-a-secret
+          POSTGRES_DB: procurali_test_bootstrap
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U procurali_test -d procurali_test_bootstrap"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
     steps:
       - name: Check out the branch
         uses: actions/checkout@v4
@@ -35,6 +50,8 @@ jobs:
 
       - name: Run the tracked CI entry point
         run: ./scripts/ci.sh
+        env:
+          TEST_DATABASE_URL: postgresql://procurali_test:procurali-test-only-not-a-secret@localhost:5432/procurali_test_bootstrap
 
       # No artifacts are uploaded: logs are the only output, and they contain
       # no secrets by construction (redacted settings, typed log fields).

@@ -73,7 +73,11 @@ lacks a real assertion.
 construction branch and pull requests to `main`: pinned `actions/checkout@v4`,
 stable Rust via `rustup` (matching `backend/rust-toolchain.toml`), then locked
 fetch/build, `fmt --check`, `clippy --all-targets -- -D warnings`, the registered
-unit/api/privacy tiers, and the private-path guard. The workflow reads tracked
-files only (it fails if any `.local/` path is tracked or present) and uploads no
-artifacts; logs stay secret-free by construction. Later phases extend `ci.sh`
-with the integration/concurrency tiers and a real PostgreSQL service.
+unit/api/privacy tiers, the integration tier against a real PostgreSQL service,
+and the private-path guard. The workflow reads tracked files only (it fails if
+any `.local/` path is tracked or present) and uploads no
+artifacts; logs stay secret-free by construction. The database service uses the
+same pinned `postgres:18.6` image+digest as local stacks, with a synthetic
+test-only password and an explicit disposable `TEST_DATABASE_URL`; a missing or
+unreachable database fails the run instead of skipping. Later phases extend
+`ci.sh` with the concurrency tier.
