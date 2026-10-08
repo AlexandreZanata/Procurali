@@ -115,4 +115,6 @@ pub mod operations {
     pub mod telemetry;
     /// Live Twilio Verify adapter over an injected transport.
     pub mod twilio_verify;
+    /// Durable bounded background-job claims over PostgreSQL.
+    pub mod worker;
 }
