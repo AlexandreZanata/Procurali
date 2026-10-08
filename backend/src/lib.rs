@@ -47,6 +47,8 @@ pub mod application {
 
 /// SQLx repositories, migrations, pool, and transaction machinery.
 pub mod persistence {
+    /// Category and locality catalogs with stable identities.
+    pub mod catalogs;
     /// Current-account and block-ledger reads for guards.
     pub mod eligibility;
     /// Durable business events recorded with their mutation.
@@ -71,6 +73,8 @@ pub mod http {
     pub mod accounts;
     /// Session routes: login, current account, and logout with CSRF contract.
     pub mod auth;
+    /// Public catalog routes: cities/regions and categories.
+    pub mod catalogs;
     /// Response allowlists and strict request bodies.
     pub mod dto;
     /// Structured errors: closed codes, exact statuses, secret-free messages.
