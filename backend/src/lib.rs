@@ -35,6 +35,8 @@ pub mod persistence {
     pub mod notices;
     /// Bounded pools, redacted handling, and liveness probes.
     pub mod pool;
+    /// Bounded serializable transaction retry (DEC-0003 machinery).
+    pub mod transaction;
 }
 
 /// Axum router, handlers, DTO allowlists, and structured errors.
