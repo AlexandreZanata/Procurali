@@ -128,6 +128,92 @@
       "status": "planned"
     }
   ],
+  "registration": {
+    "note": "Suites actually wired into scripts/test.sh. Later cards extend tiers/tasks here; unregistered tiers exit nonzero.",
+    "tasks": {
+      "P01-T01": {
+        "targets": [
+          "bin"
+        ],
+        "tests": [
+          "parses_every_supported_mode",
+          "malformed_mode_is_a_typed_refusal_not_a_panic",
+          "missing_and_empty_settings_are_refused_without_printing_values"
+        ],
+        "tiers": [
+          "unit"
+        ]
+      },
+      "P01-T02": {
+        "targets": [
+          "configuration"
+        ],
+        "tests": [
+          "synthetic_development_configuration_succeeds",
+          "missing_session_key_fails_without_printing_values",
+          "invalid_database_url_fails_clearly",
+          "test_database_equal_to_application_database_is_refused",
+          "production_fake_provider_is_refused_even_when_requested",
+          "production_requires_https_origin_and_long_session_key",
+          "test_clock_switch_is_rejected_outside_test_doubles",
+          "debug_output_never_contains_secret_values"
+        ],
+        "tiers": [
+          "unit"
+        ]
+      },
+      "P01-T03": {
+        "targets": [
+          "privacy_logging"
+        ],
+        "tests": [
+          "correlation_and_safe_error_code_are_observable",
+          "canary_secrets_are_absent_from_logs_and_failure_formatting",
+          "hostile_correlation_cannot_inject_extra_log_lines"
+        ],
+        "tiers": [
+          "unit",
+          "privacy"
+        ]
+      },
+      "P01-T04": {
+        "targets": [
+          "api_scaffold"
+        ],
+        "tests": [
+          "liveness_returns_its_exact_schema",
+          "readiness_reports_unavailable_dependency_without_values",
+          "oversized_body_and_unknown_path_have_defined_responses",
+          "request_time_bound_is_enforced",
+          "shutdown_drains_and_exits_cleanly"
+        ],
+        "tiers": [
+          "unit",
+          "api"
+        ]
+      }
+    },
+    "tiers": {
+      "api": {
+        "targets": [
+          "api_scaffold"
+        ]
+      },
+      "privacy": {
+        "targets": [
+          "privacy_logging"
+        ]
+      },
+      "unit": {
+        "targets": [
+          "bin",
+          "configuration",
+          "privacy_logging",
+          "api_scaffold"
+        ]
+      }
+    }
+  },
   "scenarios": {
     "AC-01": {
       "disposition": "mandatory",

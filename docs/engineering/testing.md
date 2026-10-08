@@ -1,7 +1,7 @@
 # Testing guide (proposed)
 
-**Status:** Proposed expectations; no test suite exists yet. Later `scripts/` wrappers and
-CI invoke these tiers from tracked files only — never from `.local/`.
+**Status:** Proposed expectations with live scaffold registration. `scripts/` wrappers
+invoke these tiers from tracked files only — never from `.local/`.
 
 ## Tiers and commands
 
@@ -18,9 +18,11 @@ CI invoke these tiers from tracked files only — never from `.local/`.
 | critical-mutations | `./scripts/test.sh critical-mutations` | Fault-injection sensitivity probes in an isolated copy (P17) |
 | load | `./scripts/test.sh load` | Bounded load + correctness probes on an explicitly selected disposable/staging target |
 
-`./scripts/test.sh all` runs every tier available at the current phase; the final
-baseline means all mandatory tiers. `./scripts/check.sh fast` is the universal quick
-gate (format, Clippy deny-warnings, focused units, contract checks, private-file guard).
+`./scripts/test.sh all` runs every registered tier (currently unit, api, privacy) and
+lists tiers without registered suites; explicitly requesting an unregistered tier,
+an unknown tier, an unknown task, or a task with no tests in the tier exits nonzero.
+Every target fails on zero discovered tests. `./scripts/check.sh fast` is the universal
+quick gate (format, Clippy deny-warnings, unit tier, private-file guard).
 
 ## Adding tests (`--task` filtering and discovery)
 
