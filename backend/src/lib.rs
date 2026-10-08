@@ -61,6 +61,8 @@ pub mod application {
     pub mod revise_request;
     /// Session lifecycle: login after proof and current-state authentication.
     pub mod sessions;
+    /// Guarded offer submission: matching availability on eligible demand.
+    pub mod submit_offer;
     /// Owner profile editing: display name and default locality.
     pub mod update_profile;
 }
@@ -105,6 +107,8 @@ pub mod http {
     pub mod errors;
     /// Liveness/readiness probes over dependency flags (no values in output).
     pub mod health;
+    /// Offer submission routes: guarded creation on eligible demand.
+    pub mod offers;
     /// Professional-profile routes: free declaration and withdrawal.
     pub mod profiles;
     /// Request-draft routes: owner-only creation, reads, and edits.
