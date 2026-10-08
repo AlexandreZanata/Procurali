@@ -49,6 +49,8 @@ pub mod application {
     pub mod request_limits;
     /// Owner request reads: bounded lists and details with truthful actions.
     pub mod request_reads;
+    /// Request revisions: material classification with preserved history.
+    pub mod revise_request;
     /// Session lifecycle: login after proof and current-state authentication.
     pub mod sessions;
     /// Owner profile editing: display name and default locality.
