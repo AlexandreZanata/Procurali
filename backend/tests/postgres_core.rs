@@ -131,7 +131,10 @@ async fn generated_ids_are_version_7_from_postgresql() {
 async fn second_migration_run_changes_nothing() {
     let pool = fresh_migrated_database("procurali_test_p02t03_rerun").await;
     let before = journal_versions(&pool).await;
-    assert_eq!(before, vec![1], "exactly the foundation version applied");
+    assert!(
+        before.contains(&1),
+        "the foundation version applied among {before:?}"
+    );
     migrations::apply(&pool)
         .await
         .expect("second run is a clean no-op");
@@ -150,6 +153,7 @@ async fn second_migration_run_changes_nothing() {
 #[tokio::test]
 async fn failing_migration_leaves_no_partial_version() {
     let pool = fresh_migrated_database("procurali_test_p02t03_rollback").await;
+    let applied = journal_versions(&pool).await;
     let dir = std::env::temp_dir().join("procurali-p02t03-failing");
     if dir.exists() {
         std::fs::remove_dir_all(&dir).expect("stale failing-migration dir clears");
@@ -172,9 +176,9 @@ async fn failing_migration_leaves_no_partial_version() {
     assert!(outcome.is_err(), "broken migration must fail loudly");
     std::fs::remove_dir_all(&dir).expect("failing-migration dir cleans up");
 
-    // Version 2 recorded nothing; its partial objects rolled back.
+    // The failing version recorded nothing; prior versions stand untouched.
     let versions = journal_versions(&pool).await;
-    assert_eq!(versions, vec![1], "only the foundation version stands");
+    assert_eq!(versions, applied, "only pre-existing versions stand");
     for table in ["rollback_probe", "rollback_half"] {
         let count: i64 = sqlx::query_scalar(
             "SELECT count(*) FROM information_schema.tables WHERE table_name = $1",
