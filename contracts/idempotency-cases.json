@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "note": "Synthetic cases only. Idempotency scope is (actor, operation, key, input digest). Replay always rechecks current eligibility before any response; sensitive output is never re-served after a restriction.",
+  "key_scope": ["actor", "operation", "key", "input_digest"],
+  "retry_policy": {
+    "isolation": "serializable for state-changing multi-resource operations",
+    "retryable_sqlstates": ["40001", "40P01"],
+    "max_attempts_total": 4,
+    "fresh_recheck_per_attempt": true,
+    "no_external_calls_inside_retryable_transaction": true
+  },
+  "cases": [
+    {
+      "id": "same-action-serialization-retry",
+      "operation": "publish_request",
+      "scenario": "Two identical publications contend for the last open slot; one attempt hits a serialization failure and retries.",
+      "expectation": "Exactly one success commits; the retry rechecks quota and either wins a genuinely free slot or is refused with quota_exceeded. No duplicate request rows, no duplicate events."
+    },
+    {
+      "id": "same-key-same-body",
+      "operation": "record_outcome",
+      "scenario": "Buyer retries completion with the same idempotency key and identical body after a network timeout.",
+      "expectation": "Return the existing business result. No duplicate outcome, attribution, or closure event (INV-34, EC-25)."
+    },
+    {
+      "id": "same-key-different-body",
+      "operation": "record_outcome",
+      "scenario": "Same idempotency key reused with a changed outcome source.",
+      "expectation": "Refuse with idempotency_key_reuse. Never apply the second body under the first key."
+    },
+    {
+      "id": "contact-replay-after-block",
+      "operation": "start_contact",
+      "scenario": "Buyer retries a previously successful contact after the seller blocked the buyer (or account suspended, offer withdrawn, request expired).",
+      "expectation": "Refuse under current eligibility (INV-28, INV-38). The response contains no phone destination and no cached handoff context."
+    },
+    {
+      "id": "contact-replay-while-eligible",
+      "operation": "start_contact",
+      "scenario": "Buyer retries a previously successful contact while every guard still holds.",
+      "expectation": "Return the existing contact record without duplicating unique-contact counts or events; a genuinely later initiation is a repeat event only if eligibility still holds (EC-25)."
+    },
+    {
+      "id": "stale-offer-revision",
+      "operation": "submit_offer",
+      "scenario": "Seller submits against request revision R1 after the buyer published material revision R2.",
+      "expectation": "Reject with current requirements (EC-34). No slot consumed by the rejected attempt; seller may resubmit matching R2 in the existing slot subject to daily allowance."
+    },
+    {
+      "id": "unblock-does-not-resurrect",
+      "operation": "start_contact",
+      "scenario": "Block between buyer and seller is lifted; buyer attempts contact on an offer invalidated during the block.",
+      "expectation": "Still refused: unblocking removes only the relationship restriction (EC-36, INV-38). A fresh offer in a later eligible cycle is required."
+    },
+    {
+      "id": "deadline-wins-race",
+      "operation": "submit_offer",
+      "scenario": "Offer mutation lands at the same instant the request deadline passes.",
+      "expectation": "Refused with expired: the business effect did not occur before the exclusive deadline (EC-07). No successful event is recorded."
+    }
+  ]
+}
