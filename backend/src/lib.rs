@@ -45,6 +45,8 @@ pub mod application {
     pub mod eligibility;
     /// Durable per-action deduplication (same key/body replays, changed body conflicts).
     pub mod idempotency;
+    /// Prioritized case review and dispositions: human decisions.
+    pub mod moderation_review;
     /// Private notice reads: owner lists and acknowledgments.
     pub mod notice_reads;
     /// Offer submission quotas: daily allowance and slot permanence.
@@ -153,6 +155,8 @@ pub mod http {
     pub mod errors;
     /// Liveness/readiness probes over dependency flags (no values in output).
     pub mod health;
+    /// Moderation routes: staff queues, review, and dispositions.
+    pub mod moderation;
     /// Notice routes: owner-only lists and acknowledgments.
     pub mod notices;
     /// Offer submission routes: guarded creation on eligible demand.
