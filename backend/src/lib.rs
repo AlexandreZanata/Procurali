@@ -109,6 +109,8 @@ pub mod application {
     pub mod revise_request;
     /// Session lifecycle: login after proof and current-state authentication.
     pub mod sessions;
+    /// Landing attribution and continuity context: visits without tracking.
+    pub mod share_attribution;
     /// Share-intent preparation: stable links, safe messages, no recipients.
     pub mod share_request;
     /// Scoped staff grants with purpose audit: explicit powers, no self-service.
