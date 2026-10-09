@@ -69,6 +69,8 @@ pub mod application {
     pub mod policy_changes;
     /// Declared professional classification, free and separate.
     pub mod professional_profile;
+    /// Public request lifecycle projection: details or limited status.
+    pub mod public_request;
     /// Complete publication validation: drafts become seven-day active cycles.
     pub mod publish_request;
     /// Declared buyer outcomes: source, attribution, and corrections.
@@ -187,6 +189,8 @@ pub mod http {
     pub mod offers;
     /// Professional-profile routes: free declaration and withdrawal.
     pub mod profiles;
+    /// Public request routes: lifecycle projection without sessions.
+    pub mod public_requests;
     /// Report routes: relevant allegations, reporter nowhere out.
     pub mod reports;
     /// Request-draft routes: owner-only creation, reads, and edits.
