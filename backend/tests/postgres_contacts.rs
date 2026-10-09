@@ -17,8 +17,10 @@
 mod database;
 
 use database::TestDatabase;
+use procurali_backend::application::contact_replay::{replay_contact, ReplayError};
 use procurali_backend::application::publish_request::publish_request;
 use procurali_backend::application::request_drafts::{create_draft, DraftInput};
+use procurali_backend::application::start_contact::{start_contact, ContactInput};
 use procurali_backend::application::submit_offer::{submit_offer, OfferInput};
 use procurali_backend::persistence::catalogs::{upsert_city, upsert_region};
 use procurali_backend::persistence::contacts::{
@@ -379,5 +381,249 @@ async fn public_projections_cannot_include_historical_destination() {
             "no plaintext destination column"
         );
     }
+    db.cleanup().await.expect("suite cleans up");
+}
+
+/// Replay helpers: phone keys shared with seeding so decryption matches.
+fn replay_keys<'a>() -> procurali_backend::persistence::users::PhoneKeys<'a> {
+    procurali_backend::persistence::users::PhoneKeys {
+        lookup_key: "p08t01-test-only-lookup-key",
+        encryption_key: "p08t01-test-only-encryption-key",
+    }
+}
+
+async fn start_handoff(
+    pool: &sqlx::PgPool,
+    buyer: uuid::Uuid,
+    request: uuid::Uuid,
+    offer: uuid::Uuid,
+    handoff: uuid::Uuid,
+) -> procurali_backend::application::start_contact::Handoff {
+    start_contact(
+        pool,
+        &replay_keys(),
+        buyer,
+        request,
+        offer,
+        ContactInput {
+            handoff_id: Some(handoff.to_string()),
+            expected_offer_terms: Some(1),
+            entry_source: Some("offer_detail".to_owned()),
+        },
+    )
+    .await
+    .expect("handoff starts")
+}
+
+#[tokio::test]
+async fn same_retry_records_one_unique_contact() {
+    let db = TestDatabase::create("p08t04_retry")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p08t04_retry_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let author = seed_active(db.pool(), "Retry Owner", "+55 11 90000-0211").await;
+    let seller = seed_active(db.pool(), "Retry Seller", "+55 11 90000-0212").await;
+    let request_id = publish_open(db.pool(), author).await;
+    let offer_id = submit_open(db.pool(), seller, request_id).await;
+    let handoff_id = uuid::Uuid::now_v7();
+
+    // The first initiation records the unique contact; every replay of the
+    // same action returns it with no new row and no new fact.
+    let first = start_handoff(db.pool(), author, request_id, offer_id, handoff_id).await;
+    assert!(!first.repeat);
+    for _ in 0..2 {
+        let replayed = replay_contact(db.pool(), &replay_keys(), author, handoff_id)
+            .await
+            .expect("retry replays");
+        assert_eq!(replayed.contact_id, first.contact_id);
+        assert_eq!(replayed.destination, first.destination);
+    }
+    assert_eq!(
+        contacts_for_offer(db.pool(), offer_id)
+            .await
+            .expect("contacts read")
+            .len(),
+        1,
+        "one unique contact stands"
+    );
+    let repeats: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM business_events WHERE resource_kind = 'contact'")
+            .fetch_one(db.pool())
+            .await
+            .expect("contact facts read");
+    assert_eq!(repeats, 0, "replays record nothing");
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn later_valid_handoff_records_repeat_without_inflation() {
+    let db = TestDatabase::create("p08t04_later")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p08t04_later_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let author = seed_active(db.pool(), "Later Owner", "+55 11 90000-0213").await;
+    let seller = seed_active(db.pool(), "Later Seller", "+55 11 90000-0214").await;
+    let request_id = publish_open(db.pool(), author).await;
+    let offer_id = submit_open(db.pool(), seller, request_id).await;
+
+    let first = start_handoff(
+        db.pool(),
+        author,
+        request_id,
+        offer_id,
+        uuid::Uuid::now_v7(),
+    )
+    .await;
+    assert!(!first.repeat);
+    // A genuinely later handoff replays eligibility, returns the standing
+    // row flagged repeat, and records exactly one repeat fact.
+    let second = start_handoff(
+        db.pool(),
+        author,
+        request_id,
+        offer_id,
+        uuid::Uuid::now_v7(),
+    )
+    .await;
+    assert!(second.repeat);
+    assert_eq!(second.contact_id, first.contact_id);
+    assert_eq!(
+        contacts_for_offer(db.pool(), offer_id)
+            .await
+            .expect("contacts read")
+            .len(),
+        1
+    );
+    let repeats: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM business_events
+         WHERE resource_kind = 'contact' AND kind = 'contact.repeated'",
+    )
+    .fetch_one(db.pool())
+    .await
+    .expect("repeat facts read");
+    assert_eq!(repeats, 1);
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn restriction_before_replay_returns_no_destination() {
+    let db = TestDatabase::create("p08t04_restricted")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p08t04_restricted_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let author = seed_active(db.pool(), "Restricted Owner", "+55 11 90000-0215").await;
+    let seller = seed_active(db.pool(), "Restricted Seller", "+55 11 90000-0216").await;
+    let request_id = publish_open(db.pool(), author).await;
+    let offer_id = submit_open(db.pool(), seller, request_id).await;
+    let handoff_id = uuid::Uuid::now_v7();
+    let first = start_handoff(db.pool(), author, request_id, offer_id, handoff_id).await;
+    assert!(first.destination.contains("5511900000216"));
+
+    // Withdrawal first: the recorded handoff replays into a refusal with no
+    // destination, even though it succeeded minutes earlier.
+    sqlx::query("UPDATE offers SET state = 'withdrawn' WHERE id = $1")
+        .bind(offer_id)
+        .execute(db.pool())
+        .await
+        .expect("synthetic withdrawal applies");
+    assert_eq!(
+        replay_contact(db.pool(), &replay_keys(), author, handoff_id).await,
+        Err(ReplayError::ForbiddenState)
+    );
+    // A block lands the same way on a fresh demand.
+    let blocked_request = publish_open(db.pool(), author).await;
+    let blocked_offer = submit_open(db.pool(), seller, blocked_request).await;
+    let blocked_handoff = uuid::Uuid::now_v7();
+    start_handoff(
+        db.pool(),
+        author,
+        blocked_request,
+        blocked_offer,
+        blocked_handoff,
+    )
+    .await;
+    sqlx::query("INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)")
+        .bind(author)
+        .bind(seller)
+        .execute(db.pool())
+        .await
+        .expect("synthetic block applies");
+    assert_eq!(
+        replay_contact(db.pool(), &replay_keys(), author, blocked_handoff).await,
+        Err(ReplayError::Blocked)
+    );
+    // Suspension behaves identically, and a stranger's guess never resolves.
+    sqlx::query("UPDATE users SET state = 'suspended' WHERE id = $1")
+        .bind(seller)
+        .execute(db.pool())
+        .await
+        .expect("synthetic suspension applies");
+    assert_eq!(
+        replay_contact(db.pool(), &replay_keys(), author, blocked_handoff).await,
+        Err(ReplayError::SellerNotActive)
+    );
+    let stranger = seed_active(db.pool(), "Replay Stranger", "+55 11 90000-0217").await;
+    assert_eq!(
+        replay_contact(db.pool(), &replay_keys(), stranger, handoff_id).await,
+        Err(ReplayError::NotFound)
+    );
+
+    // Control: a verified phone change flows into replays while history
+    // keeps the number valid at initiation (EC-21 both directions).
+    sqlx::query("UPDATE users SET state = 'active' WHERE id = $1")
+        .bind(seller)
+        .execute(db.pool())
+        .await
+        .expect("synthetic restoration applies");
+    sqlx::query("DELETE FROM user_blocks WHERE blocker_id = $1 AND blocked_id = $2")
+        .bind(author)
+        .bind(seller)
+        .execute(db.pool())
+        .await
+        .expect("synthetic unblock applies");
+    let fresh_request = publish_open(db.pool(), author).await;
+    let fresh_offer = submit_open(db.pool(), seller, fresh_request).await;
+    let fresh_handoff = uuid::Uuid::now_v7();
+    let before = start_handoff(db.pool(), author, fresh_request, fresh_offer, fresh_handoff).await;
+    assert!(before.destination.contains("5511900000216"));
+    sqlx::query(
+        "UPDATE users SET phone_ciphertext = pgp_sym_encrypt($2, $3),
+                 phone_lookup = encode(hmac(convert_to($2, 'UTF8'), convert_to($4, 'UTF8'), 'sha256'), 'hex')
+         WHERE id = $1",
+    )
+    .bind(seller)
+    .bind("+5511900000299")
+    .bind("p08t01-test-only-encryption-key")
+    .bind("p08t01-test-only-lookup-key")
+    .execute(db.pool())
+    .await
+    .expect("synthetic verified number change applies");
+    let replayed = replay_contact(db.pool(), &replay_keys(), author, fresh_handoff)
+        .await
+        .expect("replay follows the verified number");
+    assert!(replayed.destination.contains("5511900000299"));
+    let frozen = contact(db.pool(), before.contact_id)
+        .await
+        .expect("contact reads")
+        .expect("contact reads");
+    let decrypted: String = sqlx::query_scalar("SELECT pgp_sym_decrypt($1, $2)")
+        .bind(&frozen.destination_ciphertext)
+        .bind("p08t01-test-only-encryption-key")
+        .fetch_one(db.pool())
+        .await
+        .expect("frozen destination decrypts");
+    assert!(decrypted.contains("5511900000216"));
     db.cleanup().await.expect("suite cleans up");
 }
