@@ -1,10 +1,19 @@
-//! Professional-profile HTTP boundary: free declaration and withdrawal.
+//! Professional-profile HTTP boundary: free declaration and withdrawal,
+//! plus the modest public reputation projection.
 //!
 //! Routes: `PUT /api/v1/profiles/professional` stores the owner's declaration
 //! (200, frozen inventory); `DELETE /api/v1/profiles/me/professional`
-//! withdraws it (204, always idempotent). No payment input exists anywhere on
-//! these routes, and responses carry exactly the four factual public fields —
-//! no badge, verification, staff, subscription, or volume marker.
+//! withdraws it (204, always idempotent); `GET /api/v1/profiles/{id}/reputation`
+//! projects modest public evidence (200 with account age, recent activity,
+//! and buyer-reported resolutions when supported — never a verified-sales
+//! claim, complaint badge, phone, or reporter identity). No payment input
+//! exists anywhere on these routes, and responses carry exactly their
+//! factual fields — no badge, verification, staff, subscription, or volume
+//! marker.
+//!
+//! Declaration and withdrawal authenticate with current-state sessions
+//! (stale sessions answer 401); the reputation read is fully public by
+//! design and takes no session at all.
 //!
 //! Authentication reuses current-state sessions (stale sessions answer 401);
 //! the unsafe methods share the same-host origin contract as the account
@@ -15,10 +24,10 @@
 
 use axum::{
     body::Bytes,
-    extract::State,
+    extract::{Path, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
-    routing::{delete, put},
+    routing::{delete, get, put},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -27,6 +36,7 @@ use super::errors::{ApiError, Code};
 use crate::application::professional_profile::{
     declare_profile, withdraw_profile, NewProfessional, ProfessionalError,
 };
+use crate::application::reputation::{project_reputation, ReputationError};
 use crate::application::sessions::authenticate;
 
 /// Shared state for the profile routes: the pool only. No provider, keys, or
@@ -50,6 +60,7 @@ pub fn routes(state: ProfilesState) -> Router {
     Router::new()
         .route("/api/v1/profiles/professional", put(declare))
         .route("/api/v1/profiles/me/professional", delete(withdraw))
+        .route("/api/v1/profiles/{id}/reputation", get(reputation))
         .with_state(state)
 }
 
@@ -218,5 +229,18 @@ async fn withdraw(State(state): State<ProfilesState>, headers: HeaderMap) -> Res
     match withdraw_profile(&state.pool, user_id).await {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(_) => ApiError::internal().into_response(),
+    }
+}
+
+/// Project one account's modest public evidence: 200 with labeled facts,
+/// or 404 for missing accounts. Fully public by design — no session is
+/// read, since every field here is public evidence by construction.
+async fn reputation(State(state): State<ProfilesState>, Path(id): Path<uuid::Uuid>) -> Response {
+    match project_reputation(&state.pool, id).await {
+        Ok(projection) => (StatusCode::OK, Json(projection)).into_response(),
+        Err(ReputationError::NotFound) => {
+            ApiError::new(Code::NotFound, "account not found").into_response()
+        }
+        Err(ReputationError::StorageFailed) => ApiError::internal().into_response(),
     }
 }
