@@ -8,3 +8,5 @@
 pub mod expire_requests;
 /// Outcome prompts: ask once per cycle, never nag, never mutate.
 pub mod outcome_prompts;
+/// Retention cleanup sweeps: redact due ordinary data, keep the rest.
+pub mod retention_cleanup;
