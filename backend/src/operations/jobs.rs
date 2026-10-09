@@ -6,3 +6,5 @@
 
 /// Request-expiry sweeps: ended cycles with exactly one owner notice.
 pub mod expire_requests;
+/// Outcome prompts: ask once per cycle, never nag, never mutate.
+pub mod outcome_prompts;
