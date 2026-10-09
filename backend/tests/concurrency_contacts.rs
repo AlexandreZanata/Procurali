@@ -14,6 +14,7 @@
 mod database;
 
 use database::TestDatabase;
+use procurali_backend::application::block_user::block_user;
 use procurali_backend::application::publish_request::publish_request;
 use procurali_backend::application::request_drafts::{create_draft, DraftInput};
 use procurali_backend::application::request_eligibility::check_request_actionable;
@@ -470,4 +471,89 @@ async fn revise_material(pool: &sqlx::PgPool, author: uuid::Uuid, request_id: uu
     )
     .await
     .expect("fixture revision revises");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn block_winning_contact_race_yields_no_destination() {
+    let db = TestDatabase::create("p10t06_blockrace")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p10t06_blockrace_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let author = seed_active(db.pool(), "Race Owner", "+55 11 90000-0701").await;
+    let seller = seed_active(db.pool(), "Race Seller", "+55 11 90000-0702").await;
+    let (request_id, offer_id) = demand_with_offer(db.pool(), author, seller).await;
+
+    // Blocking races with contact initiation through the P10 writers: the
+    // barrier releases both at once, and the end state is exact in every
+    // branch. A block-winning race records no contact and no destination;
+    // a contact-winning race keeps exactly one unique initiation before
+    // the block invalidates its offer.
+    let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(2));
+    let block = |barrier: std::sync::Arc<tokio::sync::Barrier>| {
+        let pool = db.pool().clone();
+        async move {
+            barrier.wait().await;
+            block_user(&pool, author, seller).await
+        }
+    };
+    let handoff = |barrier: std::sync::Arc<tokio::sync::Barrier>| {
+        let pool = db.pool().clone();
+        async move {
+            barrier.wait().await;
+            start_contact(
+                &pool,
+                &test_keys(),
+                author,
+                request_id,
+                offer_id,
+                ContactInput {
+                    handoff_id: Some(uuid::Uuid::now_v7().to_string()),
+                    expected_offer_terms: Some(1),
+                    entry_source: Some("offer_detail".to_owned()),
+                },
+            )
+            .await
+        }
+    };
+    let (blocked, started) =
+        tokio::join!(block(std::sync::Arc::clone(&barrier)), handoff(barrier),);
+    match (blocked, started) {
+        (Ok(_), Ok(handoff)) => {
+            assert!(!handoff.repeat);
+            assert_eq!(contact_rows(db.pool(), offer_id).await, 1);
+            let stored = contacts_for_offer(db.pool(), offer_id)
+                .await
+                .expect("contacts read")[0]
+                .clone();
+            assert_eq!(stored.id, handoff.contact_id);
+            assert_eq!(stored.offer_price_cents, 52_000);
+        }
+        (Ok(_), Err(ContactError::Blocked | ContactError::ForbiddenState)) => {
+            assert_eq!(contact_rows(db.pool(), offer_id).await, 0);
+        }
+        (left, right) => panic!("unexpected race outcome: {left:?} / {right:?}"),
+    }
+    // The block row stands in every branch: the restriction is never lost
+    // to the race. Refusals carry no destination by construction — the
+    // error path holds no handoff value at all — and the offer is terminal
+    // afterwards, so no later contact can reopen it.
+    let stands: Option<i32> =
+        sqlx::query_scalar("SELECT 1 FROM user_blocks WHERE blocker_id = $1 AND blocked_id = $2")
+            .bind(author)
+            .bind(seller)
+            .fetch_optional(db.pool())
+            .await
+            .expect("block reads");
+    assert!(stands.is_some());
+    let state: String = sqlx::query_scalar("SELECT state FROM offers WHERE id = $1")
+        .bind(offer_id)
+        .fetch_one(db.pool())
+        .await
+        .expect("offer reads");
+    assert_eq!(state, "invalidated");
+    db.cleanup().await.expect("suite cleans up");
 }
