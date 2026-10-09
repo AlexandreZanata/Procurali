@@ -87,6 +87,8 @@ pub mod application {
     pub mod request_offer_cascades;
     /// Owner request reads: bounded lists and details with truthful actions.
     pub mod request_reads;
+    /// Explicit resource restoration precedence: current facts decide.
+    pub mod restore_content;
     /// Timed account restoration: lift the account, never the resources.
     pub mod restore_user;
     /// Formal ban reversal: restore the account, never the terminal past.

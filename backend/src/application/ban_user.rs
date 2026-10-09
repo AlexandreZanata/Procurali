@@ -207,11 +207,14 @@ pub async fn ban_user(
         .execute(&mut *tx)
         .await
         .map_err(|_| BanError::StorageFailed)?;
-    // Buyer cascade: unresolved owned requests cancel hidden with open
-    // cycles ended; related live offers on them invalidate.
+    // Buyer cascade: unresolved ACTIVE owned requests cancel hidden with
+    // open cycles ended; related live offers on them invalidate.
+    // Content-suspended rows keep their moderation standing (independent
+    // restriction): still unusable while banned, restorable after reversal
+    // and review — the ban steamrolls no open review track.
     let cancelled: Vec<uuid::Uuid> = sqlx::query_scalar(
         "UPDATE requests SET state = 'cancelled', visibility = 'hidden', updated_at = now()
-         WHERE author_id = $1 AND state IN ('active', 'suspended')
+         WHERE author_id = $1 AND state = 'active'
          RETURNING id",
     )
     .bind(input.user_id)
@@ -234,7 +237,7 @@ pub async fn ban_user(
             "UPDATE offers SET state = 'invalidated', terminal_reason = 'banned',
                     updated_at = now()
              WHERE request_id = ANY($1)
-               AND state IN ('sent', 'viewed', 'contacted', 'suspended')",
+               AND state IN ('sent', 'viewed', 'contacted')",
         )
         .bind(&cancelled)
         .execute(&mut *tx)
@@ -243,11 +246,13 @@ pub async fn ban_user(
         .rows_affected() as i64;
     }
     // Seller cascade: own remaining live offers invalidate hidden.
+    // Suspended offers keep their standing for the same independence
+    // reason as above.
     invalidated += sqlx::query(
         "UPDATE offers SET state = 'invalidated', terminal_reason = 'banned',
                 visibility = 'hidden', updated_at = now()
          WHERE seller_id = $1
-           AND state IN ('sent', 'viewed', 'contacted', 'suspended')",
+           AND state IN ('sent', 'viewed', 'contacted')",
     )
     .bind(input.user_id)
     .execute(&mut *tx)
