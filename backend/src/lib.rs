@@ -23,6 +23,8 @@ pub mod domain {
 pub mod application {
     /// Bounded verification abuse controls (guarded challenge flows).
     pub mod auth_limits;
+    /// Bilateral block operations: restrict futures, preserve history.
+    pub mod block_user;
     /// Proof-gated phone reassignment with protected history.
     pub mod change_phone;
     /// Effective-time port: production system clock vs frozen test clocks.
@@ -131,6 +133,8 @@ pub mod http {
     pub mod accounts;
     /// Session routes: login, current account, and logout with CSRF contract.
     pub mod auth;
+    /// Block routes: own restrictions, nothing disclosed.
+    pub mod blocks;
     /// Public catalog routes: cities/regions and categories.
     pub mod catalogs;
     /// Contact-initiation routes: the author's handoff, nothing else.
