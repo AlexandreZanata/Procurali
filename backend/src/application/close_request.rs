@@ -22,7 +22,6 @@
 //! is the live-offer invalidation hook the offer writers consume; no offer
 //! rows are touched here because none exist yet.
 
-use crate::application::eligibility::{check_actor, CheckOutcome};
 use crate::persistence::events::{record as record_event, NewEvent};
 use crate::persistence::requests;
 use serde_json::json;
@@ -132,12 +131,20 @@ pub async fn close_request(
     request_id: uuid::Uuid,
     outcome: BuyerOutcome,
 ) -> Result<ClosedRequest, CloseError> {
-    match check_actor(pool, author_id)
-        .await
-        .map_err(|_| CloseError::StorageFailed)?
-    {
-        CheckOutcome::Permitted => {}
-        CheckOutcome::Refused(_) => return Err(CloseError::NotActive),
+    // EC-20 (P11-T04): a suspended author completes their own request;
+    // pending, banned, deleted, and missing authors still refuse. The
+    // marketplace-wide check_actor gate stays untouched — this narrow
+    // standing read exists only for the owner-outcome path, which the
+    // ownership check below keeps scoped to the author's own rows.
+    let standing: Option<(String, Option<chrono::DateTime<chrono::Utc>>)> =
+        sqlx::query_as("SELECT state, deleted_at FROM users WHERE id = $1")
+            .bind(author_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|_| CloseError::StorageFailed)?;
+    match standing {
+        Some((state, None)) if state == "active" || state == "suspended" => {}
+        _ => return Err(CloseError::NotActive),
     }
     let stored = requests::request(pool, request_id)
         .await

@@ -85,6 +85,8 @@ pub mod application {
     pub mod request_offer_cascades;
     /// Owner request reads: bounded lists and details with truthful actions.
     pub mod request_reads;
+    /// Timed account restoration: lift the account, never the resources.
+    pub mod restore_user;
     /// Request revisions: material classification with preserved history.
     pub mod revise_request;
     /// Session lifecycle: login after proof and current-state authentication.
@@ -97,6 +99,8 @@ pub mod application {
     pub mod submit_offer;
     /// Scoped content suspension: hide now, correct privately, restore later.
     pub mod suspend_content;
+    /// Temporary account suspension: restrict now, keep safety paths open.
+    pub mod suspend_user;
     /// Owner profile editing: display name and default locality.
     pub mod update_profile;
     /// First buyer view: sent-to-viewed engagement with one conversion fact.
