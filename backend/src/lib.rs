@@ -189,6 +189,8 @@ pub mod http {
     pub mod offers;
     /// Professional-profile routes: free declaration and withdrawal.
     pub mod profiles;
+    /// Public HTML routes: safe server-rendered request pages, no framework.
+    pub mod public_html;
     /// Public request routes: lifecycle projection without sessions.
     pub mod public_requests;
     /// Report routes: relevant allegations, reporter nowhere out.
