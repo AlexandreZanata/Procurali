@@ -71,6 +71,8 @@ pub mod application {
     pub mod revise_request;
     /// Session lifecycle: login after proof and current-state authentication.
     pub mod sessions;
+    /// Guarded contact initiation: the author's handoff on live matching terms.
+    pub mod start_contact;
     /// Guarded offer submission: matching availability on eligible demand.
     pub mod submit_offer;
     /// Owner profile editing: display name and default locality.
@@ -117,6 +119,8 @@ pub mod http {
     pub mod auth;
     /// Public catalog routes: cities/regions and categories.
     pub mod catalogs;
+    /// Contact-initiation routes: the author's handoff, nothing else.
+    pub mod contacts;
     /// Response allowlists and strict request bodies.
     pub mod dto;
     /// Structured errors: closed codes, exact statuses, secret-free messages.
