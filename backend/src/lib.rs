@@ -41,6 +41,8 @@ pub mod application {
     pub mod contact_replay;
     /// Relevant report submission: useful reasons, past-interaction standing.
     pub mod create_report;
+    /// Account deletion cascades: end interaction, keep eligible history.
+    pub mod delete_account;
     /// Exact duplicate demand: normalized same-owner open-need matching.
     pub mod duplicate_intent;
     /// Live terms editing: new revisions with preserved engagement.
