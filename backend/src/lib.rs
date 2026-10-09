@@ -43,6 +43,8 @@ pub mod application {
     pub mod create_report;
     /// Account deletion cascades: end interaction, keep eligible history.
     pub mod delete_account;
+    /// Eligible local discovery: validated filters over indexed reads.
+    pub mod discovery;
     /// Exact duplicate demand: normalized same-owner open-need matching.
     pub mod duplicate_intent;
     /// Live terms editing: new revisions with preserved engagement.
@@ -133,6 +135,8 @@ pub mod persistence {
     pub mod catalogs;
     /// Private contact initiations with frozen snapshots.
     pub mod contacts;
+    /// Eligible local discovery reads: live public demand, ranked.
+    pub mod discovery;
     /// Current-account and block-ledger reads for guards.
     pub mod eligibility;
     /// Durable business events recorded with their mutation.
