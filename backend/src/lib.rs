@@ -87,6 +87,8 @@ pub mod application {
     pub mod revise_request;
     /// Session lifecycle: login after proof and current-state authentication.
     pub mod sessions;
+    /// Scoped staff grants with purpose audit: explicit powers, no self-service.
+    pub mod staff_permissions;
     /// Guarded contact initiation: the author's handoff on live matching terms.
     pub mod start_contact;
     /// Guarded offer submission: matching availability on eligible demand.
