@@ -41,6 +41,8 @@ pub mod application {
     pub mod eligibility;
     /// Durable per-action deduplication (same key/body replays, changed body conflicts).
     pub mod idempotency;
+    /// Private notice reads: owner lists and acknowledgments.
+    pub mod notice_reads;
     /// Offer submission quotas: daily allowance and slot permanence.
     pub mod offer_limits;
     /// Private offer comparison reads: buyer sets and seller self-views.
@@ -135,6 +137,8 @@ pub mod http {
     pub mod errors;
     /// Liveness/readiness probes over dependency flags (no values in output).
     pub mod health;
+    /// Notice routes: owner-only lists and acknowledgments.
+    pub mod notices;
     /// Offer submission routes: guarded creation on eligible demand.
     pub mod offers;
     /// Professional-profile routes: free declaration and withdrawal.
