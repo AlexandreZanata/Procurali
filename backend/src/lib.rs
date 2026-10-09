@@ -35,6 +35,8 @@ pub mod application {
     pub mod contact_limits;
     /// Idempotent contact replay: the same action returns its result, renewed.
     pub mod contact_replay;
+    /// Relevant report submission: useful reasons, past-interaction standing.
+    pub mod create_report;
     /// Exact duplicate demand: normalized same-owner open-need matching.
     pub mod duplicate_intent;
     /// Live terms editing: new revisions with preserved engagement.
@@ -153,6 +155,8 @@ pub mod http {
     pub mod offers;
     /// Professional-profile routes: free declaration and withdrawal.
     pub mod profiles;
+    /// Report routes: relevant allegations, reporter nowhere out.
+    pub mod reports;
     /// Request-draft routes: owner-only creation, reads, and edits.
     pub mod requests;
     /// Router with explicit size/time bounds and stable errors.
