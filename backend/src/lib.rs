@@ -51,6 +51,8 @@ pub mod application {
     pub mod edit_offer;
     /// Shared current-account and relationship guards for writers.
     pub mod eligibility;
+    /// Structured contacted-party feedback: one observation set per contact.
+    pub mod feedback;
     /// Durable per-action deduplication (same key/body replays, changed body conflicts).
     pub mod idempotency;
     /// Prioritized case review and dispositions: human decisions.
