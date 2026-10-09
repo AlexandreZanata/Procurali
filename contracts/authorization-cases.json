@@ -71,6 +71,7 @@
     { "input": { "owner_id": "forged-uuid", "role": "admin", "state": "active" }, "expectation": "Ignored. Ownership, role, and state derive server-side (INV-05)." },
     { "input": { "price": "10.00", "buyer_phone": "+55-11-0000-0000", "internal_flags": {} }, "expectation": "Unknown/forbidden fields rejected or stripped; phone material never accepted from clients." },
     { "input": { "request_revision": "stale-revision-id" }, "expectation": "Rejected with current requirements (EC-34); no hidden-budget acceptance." },
-    { "input": { "state": "active", "cycle": 99 }, "expectation": "Client-supplied lifecycle ignored; server state authoritative." }
+    { "input": { "state": "active", "cycle": 99 }, "expectation": "Client-supplied lifecycle ignored; server state authoritative." },
+    { "input": { "target_kind": "offer", "target_id": "valid-offer-uuid", "reason": "spam", "detail": "noise", "reporter_id": "forged-uuid", "phone": "+55-11-0000-0000", "token": "client-supplied-token" }, "expectation": "Closed report body refuses unknown reporter/phone/token keys with 400; nothing is stored and no value is reflected (P12-T04)." }
   ]
 }
