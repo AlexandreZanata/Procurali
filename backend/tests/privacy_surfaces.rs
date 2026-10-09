@@ -24,8 +24,12 @@ mod database;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use database::TestDatabase;
+use procurali_backend::application::block_user::block_user;
 use procurali_backend::application::delete_account::{delete_account, DeleteAccountInput};
 use procurali_backend::application::phone_verification::FakeVerifyProvider;
+use procurali_backend::application::publish_request::publish_request;
+use procurali_backend::application::request_drafts::{create_draft, DraftInput};
+use procurali_backend::application::request_eligibility::expire_if_elapsed;
 use procurali_backend::http::accounts::{routes as account_routes, AccountsState};
 use procurali_backend::http::auth::{routes as auth_routes, AuthState};
 use procurali_backend::http::blocks::{routes as block_routes, BlocksState};
@@ -33,6 +37,8 @@ use procurali_backend::http::contacts::{routes as contact_routes, ContactsState}
 use procurali_backend::http::health::{liveness, readiness, DependencyStatus};
 use procurali_backend::http::notices::{routes as notice_routes, NoticesState};
 use procurali_backend::http::offers::{routes as offer_routes, OffersState};
+use procurali_backend::http::public_html::{routes as html_routes, PublicHtmlState};
+use procurali_backend::http::public_requests::{routes as public_routes, PublicRequestsState};
 use procurali_backend::http::reports::{routes as report_routes, ReportsState};
 use procurali_backend::http::requests::{routes as request_routes, RequestsState};
 use procurali_backend::persistence::catalogs::{upsert_city, upsert_region};
@@ -80,6 +86,8 @@ fn test_app(db: &TestDatabase) -> axum::Router {
     .merge(block_routes(BlocksState::new(db.pool().clone())))
     .merge(report_routes(ReportsState::new(db.pool().clone())))
     .merge(notice_routes(NoticesState::new(db.pool().clone())))
+    .merge(public_routes(PublicRequestsState::new(db.pool().clone())))
+    .merge(html_routes(PublicHtmlState::new(db.pool().clone())))
     .route("/health/live", axum::routing::get(liveness))
     .route(
         "/health/ready",
@@ -729,5 +737,122 @@ async fn deleted_and_suspended_hide_everything() {
     )
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn lifecycle_change_keeps_public_surfaces_clean() {
+    let db = TestDatabase::create("p13t06_lifecycle")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p13t06_lifecycle_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let app = test_app(&db);
+    let mut session_tokens = Vec::new();
+    let (buyer, _) = provision_active(
+        &app,
+        "+55 11 90000-2601",
+        "Cycle Buyer",
+        &mut session_tokens,
+    )
+    .await;
+    let (viewer, viewer_cookie) = provision_active(
+        &app,
+        "+55 11 90000-2602",
+        "Cycle Viewer",
+        &mut session_tokens,
+    )
+    .await;
+    let draft = create_draft(
+        db.pool(),
+        buyer,
+        DraftInput {
+            title: Some("Refrigerator".to_owned()),
+            category_code: Some("home_appliances".to_owned()),
+            budget: Some("600.00".to_owned()),
+            condition: Some("either".to_owned()),
+            city_code: Some("campinas".to_owned()),
+            region_code: Some("centro".to_owned()),
+            notes: None,
+        },
+    )
+    .await
+    .expect("fixture draft validates");
+    let demand = publish_request(db.pool(), buyer, draft.id)
+        .await
+        .expect("fixture draft publishes")
+        .id;
+
+    // While live, JSON and HTML agree on safe public content.
+    let (status, full) = call(
+        app.clone(),
+        "GET",
+        &format!("/api/v1/public/requests/{demand}"),
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_clean(&full, None, &session_tokens);
+
+    // Expiry between loads flips both surfaces to standing-only and
+    // generic respectively, with no content or allegation surviving —
+    // and a block afterwards changes nothing observable.
+    let now = chrono::Utc::now();
+    sqlx::query(
+        "UPDATE request_cycles SET started_at = $2, deadline = $3
+         WHERE request_id = $1 AND cycle_number = 1",
+    )
+    .bind(demand)
+    .bind(now - chrono::Duration::days(8))
+    .bind(now - chrono::Duration::days(1))
+    .execute(db.pool())
+    .await
+    .expect("synthetic deadline passage applies");
+    let mut tx = db.pool().begin().await.expect("transaction begins");
+    expire_if_elapsed(&mut tx, demand, now)
+        .await
+        .expect("expiry evaluates");
+    tx.commit().await.expect("expiry commits");
+    block_user(db.pool(), buyer, viewer)
+        .await
+        .expect("pair blocks");
+    // The expired JSON link exposes standing without content; the HTML
+    // link exposes its generic page. Both stay clean for the blocked
+    // viewer with the expired title gone from each.
+    let (status, limited) = call(
+        app.clone(),
+        "GET",
+        &format!("/api/v1/public/requests/{demand}"),
+        None,
+        Some(&viewer_cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(limited["status"], "expired");
+    assert!(limited.get("title").is_none());
+    assert_clean(&limited, None, &session_tokens);
+    let response = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/v1/public/requests/{demand}/html"))
+                .header("host", "app.test")
+                .header("cookie", viewer_cookie.clone())
+                .body(Body::empty())
+                .expect("test request builds"),
+        )
+        .await
+        .expect("route responds");
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(response.into_body(), 65_536)
+        .await
+        .expect("body reads");
+    let page = String::from_utf8(bytes.to_vec()).expect("html is UTF-8");
+    assert!(!page.contains("Refrigerator"), "no title past expiry");
+    assert!(!page.contains("5511900002601"));
+    assert!(!page.contains("{{"));
     db.cleanup().await.expect("suite cleans up");
 }
