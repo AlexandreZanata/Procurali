@@ -14,7 +14,12 @@
 mod database;
 
 use database::TestDatabase;
+use procurali_backend::application::auth_limits::AbuseLimits;
 use procurali_backend::application::block_user::block_user;
+use procurali_backend::application::change_phone::{
+    confirm_number_change, request_number_change, ChangeConfirmOutcome, ChangeRequestOutcome,
+};
+use procurali_backend::application::phone_verification::FakeVerifyProvider;
 use procurali_backend::application::publish_request::publish_request;
 use procurali_backend::application::request_drafts::{create_draft, DraftInput};
 use procurali_backend::application::request_eligibility::check_request_actionable;
@@ -555,5 +560,110 @@ async fn block_winning_contact_race_yields_no_destination() {
         .await
         .expect("offer reads");
     assert_eq!(state, "invalidated");
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn phone_change_retry_keeps_single_history() {
+    let db = TestDatabase::create("p12t05_phonerace")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p12t05_phonerace_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let author = seed_active(db.pool(), "Race Owner", "+55 11 90000-1913").await;
+    let seller = seed_active(db.pool(), "Race Seller", "+55 11 90000-1911").await;
+    let (request_id, offer_id) = demand_with_offer(db.pool(), author, seller).await;
+    start_handoff(db.pool(), author, request_id, offer_id)
+        .await
+        .expect("fixture handoff starts");
+
+    // The change anchor records first; then confirmation races with a
+    // contact retry. Both orders are legitimate: the retry re-decrypts
+    // whatever destination is current, while the contact row, the terms
+    // snapshot, and the history entry stay exactly one.
+    let provider = FakeVerifyProvider::for_tests("135790");
+    assert_eq!(
+        request_number_change(
+            db.pool(),
+            &provider,
+            seller,
+            "+55 11 90000-1912",
+            test_keys(),
+            std::time::Duration::from_secs(300),
+            AbuseLimits {
+                max_starts_per_hour: 10,
+                resend_minimum_secs: 0,
+                max_attempts_per_challenge: 5,
+            },
+        )
+        .await
+        .expect("request works"),
+        ChangeRequestOutcome::Sent
+    );
+    let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(2));
+    let confirm = |barrier: std::sync::Arc<tokio::sync::Barrier>| {
+        let pool = db.pool().clone();
+        async move {
+            barrier.wait().await;
+            confirm_number_change(
+                &pool,
+                &FakeVerifyProvider::for_tests("135790"),
+                seller,
+                "+55 11 90000-1912",
+                "135790",
+                test_keys(),
+            )
+            .await
+            .expect("confirmation answers")
+        }
+    };
+    let retry = |barrier: std::sync::Arc<tokio::sync::Barrier>| {
+        let pool = db.pool().clone();
+        async move {
+            barrier.wait().await;
+            start_contact(
+                &pool,
+                &test_keys(),
+                author,
+                request_id,
+                offer_id,
+                ContactInput {
+                    handoff_id: Some(uuid::Uuid::now_v7().to_string()),
+                    expected_offer_terms: Some(1),
+                    entry_source: Some("offer_detail".to_owned()),
+                },
+            )
+            .await
+            .expect("retry answers")
+        }
+    };
+    let (confirmed, retried) =
+        tokio::join!(confirm(std::sync::Arc::clone(&barrier)), retry(barrier),);
+    assert_eq!(confirmed, ChangeConfirmOutcome::Changed);
+    assert!(retried.repeat);
+    assert!(
+        retried.destination.contains("5511900001911")
+            || retried.destination.contains("5511900001912"),
+        "retry decrypts the destination current at its own time"
+    );
+    assert_eq!(contact_rows(db.pool(), offer_id).await, 1);
+    let stored = contacts_for_offer(db.pool(), offer_id)
+        .await
+        .expect("contacts read")[0]
+        .clone();
+    assert_eq!(stored.offer_price_cents, 52_000);
+    let history: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM business_events
+         WHERE resource_kind = 'account' AND resource_id = $1
+           AND kind = 'account.phone_changed'",
+    )
+    .bind(seller)
+    .fetch_one(db.pool())
+    .await
+    .expect("history facts read");
+    assert_eq!(history, 1, "exactly one reassignment recorded");
     db.cleanup().await.expect("suite cleans up");
 }
