@@ -61,6 +61,8 @@ pub mod application {
     pub mod pair_eligibility;
     /// Phone-verification provider boundary with a restricted deterministic fake.
     pub mod phone_verification;
+    /// Category prohibition and prospective policy versions: rules change, facts stand.
+    pub mod policy_changes;
     /// Declared professional classification, free and separate.
     pub mod professional_profile;
     /// Complete publication validation: drafts become seven-day active cycles.
