@@ -95,6 +95,8 @@ pub mod application {
     pub mod start_contact;
     /// Guarded offer submission: matching availability on eligible demand.
     pub mod submit_offer;
+    /// Scoped content suspension: hide now, correct privately, restore later.
+    pub mod suspend_content;
     /// Owner profile editing: display name and default locality.
     pub mod update_profile;
     /// First buyer view: sent-to-viewed engagement with one conversion fact.

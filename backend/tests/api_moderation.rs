@@ -26,14 +26,20 @@ use procurali_backend::application::phone_verification::FakeVerifyProvider;
 use procurali_backend::application::publish_request::publish_request;
 use procurali_backend::application::report_updates::submit_grouped_report;
 use procurali_backend::application::request_drafts::{create_draft, DraftInput};
+use procurali_backend::application::request_eligibility::expire_if_elapsed;
+use procurali_backend::application::revise_request::{revise_request, ReviseInput};
 use procurali_backend::application::staff_permissions::{
     bootstrap_grant, grant_role, BootstrapInput, GrantInput,
 };
 use procurali_backend::application::submit_offer::{submit_offer, OfferInput};
+use procurali_backend::application::suspend_content::{suspend_content, SuspendInput};
 use procurali_backend::http::accounts::{routes as account_routes, AccountsState};
 use procurali_backend::http::auth::{routes as auth_routes, AuthState};
+use procurali_backend::http::contacts::{routes as contact_routes, ContactsState};
 use procurali_backend::http::moderation::{routes as moderation_routes, ModerationState};
+use procurali_backend::http::offers::{routes as offer_routes, OffersState};
 use procurali_backend::http::reports::{routes as report_routes, ReportsState};
+use procurali_backend::http::requests::{routes as request_routes, RequestsState};
 use procurali_backend::persistence::catalogs::{upsert_city, upsert_region};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -59,6 +65,13 @@ fn test_app(db: &TestDatabase) -> axum::Router {
         None,
     )))
     .merge(report_routes(ReportsState::new(db.pool().clone())))
+    .merge(request_routes(RequestsState::new(db.pool().clone())))
+    .merge(offer_routes(OffersState::new(db.pool().clone())))
+    .merge(contact_routes(ContactsState::new(
+        db.pool().clone(),
+        LOOKUP_KEY.to_owned(),
+        ENCRYPTION_KEY.to_owned(),
+    )))
     .merge(moderation_routes(ModerationState::new(db.pool().clone())))
 }
 
@@ -675,5 +688,325 @@ async fn unprivileged_cannot_inspect_or_decide() {
         .await
         .expect("audits read");
     assert_eq!(audits, 2, "grants only; refusals audit nothing");
+    db.cleanup().await.expect("suite cleans up");
+}
+
+async fn suspend_request(
+    pool: &sqlx::PgPool,
+    moderator: uuid::Uuid,
+    target: uuid::Uuid,
+) -> procurali_backend::application::suspend_content::SuspendedContent {
+    suspend_content(
+        pool,
+        moderator,
+        SuspendInput {
+            target_kind: "request".to_owned(),
+            target_id: target,
+            reason: "credible fraud pattern".to_owned(),
+            policy_version: "v1".to_owned(),
+            purpose: "hide pending review".to_owned(),
+            case_id: None,
+        },
+    )
+    .await
+    .expect("suspension suspends")
+}
+
+#[tokio::test]
+async fn suspended_request_cannot_be_shared_offered_or_contacted() {
+    let db = TestDatabase::create("p11t03_hidden")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p11t03_hidden_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let app = test_app(&db);
+    let (moderator, _) = seed_moderator(&app, db.pool()).await;
+    let buyer = provision_active(&app, "+55 11 90000-0912", "Hidden Buyer").await;
+    let buyer_cookie = login_cookie(app.clone(), "+55 11 90000-0912").await;
+    let seller = provision_active(&app, "+55 11 90000-0913", "Hidden Seller").await;
+    let seller_cookie = login_cookie(app.clone(), "+55 11 90000-0913").await;
+    provision_active(&app, "+55 11 90000-0914", "Hidden Stranger").await;
+    let stranger_cookie = login_cookie(app.clone(), "+55 11 90000-0914").await;
+    let (demand, offer) = live_offer(db.pool(), buyer, seller).await;
+
+    // Suspension hides with its prior standing recorded; repeating it
+    // converges with no new fact.
+    let hidden = suspend_request(db.pool(), moderator, demand).await;
+    assert!(hidden.transitioned);
+    assert_eq!(hidden.state, "suspended");
+    assert_eq!(hidden.visibility, "hidden");
+    let again = suspend_request(db.pool(), moderator, demand).await;
+    assert!(!again.transitioned);
+    let facts: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM business_events
+         WHERE resource_kind = 'request' AND kind = 'request.suspended'",
+    )
+    .fetch_one(db.pool())
+    .await
+    .expect("suspension facts read");
+    assert_eq!(facts, 1);
+    let payload: serde_json::Value = sqlx::query_scalar(
+        "SELECT payload FROM business_events
+         WHERE resource_kind = 'request' AND kind = 'request.suspended'",
+    )
+    .fetch_one(db.pool())
+    .await
+    .expect("suspension payload reads");
+    assert_eq!(payload["previous_state"], "active");
+    assert_eq!(payload["previous_visibility"], "public");
+    assert_eq!(payload["reason"], "credible fraud pattern");
+
+    // New offers refuse, contact refuses with no destination, and strangers
+    // read generic unavailability — while the owner keeps history.
+    let (status, refused) = call(
+        app.clone(),
+        "POST",
+        &format!("/api/v1/requests/{demand}/offers"),
+        Some(json!({
+            "revision_number": 1, "cycle_number": 1,
+            "description": "Late unit", "price": "500.00",
+            "condition": "used", "city_code": "campinas",
+            "region_code": "centro", "available": true,
+            "available_in_city": true,
+        })),
+        Some(&seller_cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(refused["code"], "forbidden_state");
+    let (status, refused) = call(
+        app.clone(),
+        "POST",
+        &format!("/api/v1/requests/{demand}/offers/{offer}/contact"),
+        Some(json!({
+            "handoff_id": uuid::Uuid::now_v7().to_string(),
+            "expected_offer_terms": 1,
+            "entry_source": "offer_detail",
+        })),
+        Some(&buyer_cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(refused["code"], "forbidden_state");
+    assert_queue_private(&refused);
+    let (status, stranger) = call(
+        app.clone(),
+        "GET",
+        &format!("/api/v1/requests/{demand}"),
+        None,
+        Some(&stranger_cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(stranger["code"], "not_found");
+    assert_queue_private(&stranger);
+    let (status, _) = call(
+        app.clone(),
+        "GET",
+        &format!("/api/v1/requests/{demand}"),
+        None,
+        Some(&buyer_cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn private_correction_does_not_republish() {
+    let db = TestDatabase::create("p11t03_correct")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p11t03_correct_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let app = test_app(&db);
+    let (moderator, _) = seed_moderator(&app, db.pool()).await;
+    let buyer = provision_active(&app, "+55 11 90000-0915", "Correct Buyer").await;
+    let buyer_cookie = login_cookie(app.clone(), "+55 11 90000-0915").await;
+    let seller = provision_active(&app, "+55 11 90000-0916", "Correct Seller").await;
+    let (demand, offer) = live_offer(db.pool(), buyer, seller).await;
+    suspend_request(db.pool(), moderator, demand).await;
+
+    let before: (chrono::DateTime<chrono::Utc>, i32) = sqlx::query_as(
+        "SELECT deadline, cycle_number FROM request_cycles
+         WHERE request_id = $1 AND cycle_number = 1",
+    )
+    .bind(demand)
+    .fetch_one(db.pool())
+    .await
+    .expect("cycle reads");
+    let before_revision: i32 =
+        sqlx::query_scalar("SELECT current_revision_number FROM requests WHERE id = $1")
+            .bind(demand)
+            .fetch_one(db.pool())
+            .await
+            .expect("revision reads");
+
+    // The owner corrects the suspended wording through the real revision
+    // path: a private revision stores, and nothing republishes.
+    revise_request(
+        db.pool(),
+        buyer,
+        demand,
+        ReviseInput {
+            title: "Refrigerator Pro".to_owned(),
+            category_code: "home_appliances".to_owned(),
+            budget: "600.00".to_owned(),
+            condition: "either".to_owned(),
+            city_code: "campinas".to_owned(),
+            region_code: "centro".to_owned(),
+            notes: "".to_owned(),
+        },
+    )
+    .await
+    .expect("suspended correction stores");
+    let standing: (String, String, i32) = sqlx::query_as(
+        "SELECT state, visibility, current_revision_number FROM requests WHERE id = $1",
+    )
+    .bind(demand)
+    .fetch_one(db.pool())
+    .await
+    .expect("standing re-reads");
+    assert_eq!(
+        standing,
+        (
+            "suspended".to_owned(),
+            "hidden".to_owned(),
+            before_revision + 1
+        )
+    );
+    let after: (chrono::DateTime<chrono::Utc>, i32) = sqlx::query_as(
+        "SELECT deadline, cycle_number FROM request_cycles
+         WHERE request_id = $1 AND cycle_number = 1",
+    )
+    .bind(demand)
+    .fetch_one(db.pool())
+    .await
+    .expect("cycle re-reads");
+    assert_eq!(before, after, "deadline and cycle run unchanged");
+    let published: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM business_events
+         WHERE resource_kind = 'request' AND resource_id = $1 AND kind = 'request.published'",
+    )
+    .bind(demand)
+    .fetch_one(db.pool())
+    .await
+    .expect("publication facts read");
+    assert_eq!(published, 1, "correction published nothing");
+    let revised: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM business_events
+         WHERE resource_kind = 'request' AND resource_id = $1 AND kind = 'request.revised'",
+    )
+    .bind(demand)
+    .fetch_one(db.pool())
+    .await
+    .expect("revision facts read");
+    assert_eq!(revised, 1);
+
+    // The restriction survives the correction: contact still refuses.
+    let (status, refused) = call(
+        app.clone(),
+        "POST",
+        &format!("/api/v1/requests/{demand}/offers/{offer}/contact"),
+        Some(json!({
+            "handoff_id": uuid::Uuid::now_v7().to_string(),
+            "expected_offer_terms": 1,
+            "entry_source": "offer_detail",
+        })),
+        Some(&buyer_cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_queue_private(&refused);
+    let _ = seller;
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn deadline_runs_and_expiry_stays_hidden() {
+    let db = TestDatabase::create("p11t03_expiry")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p11t03_expiry_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let app = test_app(&db);
+    let (moderator, _) = seed_moderator(&app, db.pool()).await;
+    let buyer = provision_active(&app, "+55 11 90000-0917", "Expiry Buyer").await;
+    let buyer_cookie = login_cookie(app.clone(), "+55 11 90000-0917").await;
+    let seller = provision_active(&app, "+55 11 90000-0918", "Expiry Seller").await;
+    let seller_cookie = login_cookie(app.clone(), "+55 11 90000-0918").await;
+    let (demand, offer) = live_offer(db.pool(), buyer, seller).await;
+    suspend_request(db.pool(), moderator, demand).await;
+
+    // The original deadline passes under suspension: expiry moves state
+    // only, keeping hidden visibility — never an active extension.
+    let now = chrono::Utc::now();
+    sqlx::query(
+        "UPDATE request_cycles SET started_at = $2, deadline = $3
+         WHERE request_id = $1 AND cycle_number = 1",
+    )
+    .bind(demand)
+    .bind(now - chrono::Duration::days(8))
+    .bind(now - chrono::Duration::days(1))
+    .execute(db.pool())
+    .await
+    .expect("synthetic deadline passage applies");
+    let mut tx = db.pool().begin().await.expect("transaction begins");
+    expire_if_elapsed(&mut tx, demand, now)
+        .await
+        .expect("expiry evaluates");
+    tx.commit().await.expect("expiry commits");
+    let standing: (String, String) =
+        sqlx::query_as("SELECT state, visibility FROM requests WHERE id = $1")
+            .bind(demand)
+            .fetch_one(db.pool())
+            .await
+            .expect("standing re-reads");
+    assert_eq!(standing, ("expired".to_owned(), "hidden".to_owned()));
+
+    // Expired-and-hidden refuses contact and offers alike, with nothing
+    // disclosed and no reactivation available on this card. Terminal
+    // standing outranks the elapsed deadline in the reported refusal.
+    let (status, refused) = call(
+        app.clone(),
+        "POST",
+        &format!("/api/v1/requests/{demand}/offers/{offer}/contact"),
+        Some(json!({
+            "handoff_id": uuid::Uuid::now_v7().to_string(),
+            "expected_offer_terms": 1,
+            "entry_source": "offer_detail",
+        })),
+        Some(&buyer_cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(refused["code"], "forbidden_state");
+    assert_queue_private(&refused);
+    let (status, refused) = call(
+        app.clone(),
+        "POST",
+        &format!("/api/v1/requests/{demand}/offers"),
+        Some(json!({
+            "revision_number": 1, "cycle_number": 1,
+            "description": "Late unit", "price": "500.00",
+            "condition": "used", "city_code": "campinas",
+            "region_code": "centro", "available": true,
+            "available_in_city": true,
+        })),
+        Some(&seller_cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(refused["code"], "forbidden_state");
+    assert_queue_private(&refused);
     db.cleanup().await.expect("suite cleans up");
 }
