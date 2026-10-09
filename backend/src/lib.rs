@@ -85,6 +85,8 @@ pub mod application {
 pub mod persistence {
     /// Category and locality catalogs with stable identities.
     pub mod catalogs;
+    /// Private contact initiations with frozen snapshots.
+    pub mod contacts;
     /// Current-account and block-ledger reads for guards.
     pub mod eligibility;
     /// Durable business events recorded with their mutation.
