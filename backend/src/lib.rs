@@ -23,6 +23,8 @@ pub mod domain {
 pub mod application {
     /// Bounded verification abuse controls (guarded challenge flows).
     pub mod auth_limits;
+    /// Permanent bans: admin-only indefinite exclusion with distinct cascades.
+    pub mod ban_user;
     /// Bilateral block operations: restrict futures, preserve history.
     pub mod block_user;
     /// Proof-gated phone reassignment with protected history.
@@ -87,6 +89,8 @@ pub mod application {
     pub mod request_reads;
     /// Timed account restoration: lift the account, never the resources.
     pub mod restore_user;
+    /// Formal ban reversal: restore the account, never the terminal past.
+    pub mod reverse_ban;
     /// Request revisions: material classification with preserved history.
     pub mod revise_request;
     /// Session lifecycle: login after proof and current-state authentication.

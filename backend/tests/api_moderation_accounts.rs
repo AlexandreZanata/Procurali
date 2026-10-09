@@ -20,17 +20,22 @@ mod database;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use database::TestDatabase;
-use procurali_backend::application::close_request::{close_request, BuyerOutcome, OutcomeSource};
+use procurali_backend::application::ban_user::{ban_user, BanError, BanUserInput};
+use procurali_backend::application::close_request::{
+    close_request, BuyerOutcome, CloseError, OutcomeSource,
+};
 use procurali_backend::application::create_report::{submit_report, ReportInput};
 use procurali_backend::application::phone_verification::FakeVerifyProvider;
 use procurali_backend::application::publish_request::publish_request;
 use procurali_backend::application::request_drafts::{create_draft, DraftInput};
 use procurali_backend::application::request_eligibility::expire_if_elapsed;
 use procurali_backend::application::restore_user::{restore_user, RestoreUserInput};
+use procurali_backend::application::reverse_ban::{reverse_ban, ReverseBanError, ReverseBanInput};
 use procurali_backend::application::staff_permissions::{
     bootstrap_grant, grant_role, BootstrapInput, GrantInput,
 };
-use procurali_backend::application::submit_offer::{submit_offer, OfferInput};
+use procurali_backend::application::start_contact::{start_contact, ContactError, ContactInput};
+use procurali_backend::application::submit_offer::{submit_offer, OfferInput, SubmitError};
 use procurali_backend::application::suspend_user::{suspend_user, SuspendUserInput};
 use procurali_backend::http::accounts::{routes as account_routes, AccountsState};
 use procurali_backend::http::auth::{routes as auth_routes, AuthState};
@@ -38,6 +43,7 @@ use procurali_backend::http::contacts::{routes as contact_routes, ContactsState}
 use procurali_backend::http::offers::{routes as offer_routes, OffersState};
 use procurali_backend::http::requests::{routes as request_routes, RequestsState};
 use procurali_backend::persistence::catalogs::{upsert_city, upsert_region};
+use procurali_backend::persistence::users::PhoneKeys;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tower::ServiceExt;
@@ -220,6 +226,44 @@ async fn seed_moderator(
     .await
     .expect("moderator granted");
     moderator
+}
+
+/// One administrator behind the real audited grant chain; return its id.
+async fn seed_admin(
+    app: &axum::Router,
+    pool: &sqlx::PgPool,
+    operator_phone: &str,
+    admin_phone: &str,
+) -> uuid::Uuid {
+    let operator = provision_active(app, operator_phone, "Ban Operator").await;
+    bootstrap_grant(
+        pool,
+        BootstrapInput {
+            user_id: operator,
+            role: "administrator".to_owned(),
+            scope: "safety".to_owned(),
+            reason: "launch cover".to_owned(),
+            operator_label: "launch-operator-1".to_owned(),
+            policy_version: "v1".to_owned(),
+        },
+    )
+    .await
+    .expect("launch bootstrap grants");
+    let admin = provision_active(app, admin_phone, "Ban Admin").await;
+    grant_role(
+        pool,
+        operator,
+        GrantInput {
+            user_id: admin,
+            role: "administrator".to_owned(),
+            scope: "safety".to_owned(),
+            reason: "duty cover".to_owned(),
+        },
+        "v1",
+    )
+    .await
+    .expect("administrator granted");
+    admin
 }
 
 /// One live demand with one offer through the real operations; return ids.
@@ -565,5 +609,479 @@ async fn restore_after_expiry_never_revives_offer() {
     )
     .await;
     assert!(status.is_client_error());
+    db.cleanup().await.expect("suite cleans up");
+}
+
+/// Test-only contact keys (same test values the route state carries).
+fn contact_keys<'a>() -> PhoneKeys<'a> {
+    PhoneKeys {
+        lookup_key: LOOKUP_KEY,
+        encryption_key: ENCRYPTION_KEY,
+    }
+}
+
+fn ban_input(user_id: uuid::Uuid) -> BanUserInput {
+    BanUserInput {
+        user_id,
+        reason: "trafficking pattern".to_owned(),
+        evidence: "substantiated reports plus contact pattern".to_owned(),
+        policy_version: "v1".to_owned(),
+        purpose: "indefinite exclusion".to_owned(),
+        case_id: None,
+    }
+}
+
+#[tokio::test]
+async fn moderator_regular_cannot_ban_or_reverse() {
+    let db = TestDatabase::create("p11t05_powers")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p11t05_powers_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let app = test_app(&db);
+    let admin = seed_admin(&app, db.pool(), "+55 11 90000-1101", "+55 11 90000-1102").await;
+    let moderator = provision_active(&app, "+55 11 90000-1103", "Ban Moderator").await;
+    grant_role(
+        db.pool(),
+        admin,
+        GrantInput {
+            user_id: moderator,
+            role: "moderator".to_owned(),
+            scope: "safety".to_owned(),
+            reason: "triage cover".to_owned(),
+        },
+        "v1",
+    )
+    .await
+    .expect("moderator granted");
+    let regular = provision_active(&app, "+55 11 90000-1104", "Ban Regular").await;
+    let target = provision_active(&app, "+55 11 90000-1105", "Ban Target").await;
+
+    // Bans and reversals answer to administrators only.
+    assert_eq!(
+        ban_user(db.pool(), moderator, ban_input(target)).await,
+        Err(BanError::NotPermitted)
+    );
+    assert_eq!(
+        ban_user(db.pool(), regular, ban_input(target)).await,
+        Err(BanError::NotPermitted)
+    );
+    // Undocumented bans refuse even for administrators.
+    assert_eq!(
+        ban_user(
+            db.pool(),
+            admin,
+            BanUserInput {
+                reason: "".to_owned(),
+                ..ban_input(target)
+            }
+        )
+        .await,
+        Err(BanError::InvalidField)
+    );
+    assert_eq!(
+        ban_user(
+            db.pool(),
+            admin,
+            BanUserInput {
+                evidence: "   ".to_owned(),
+                ..ban_input(target)
+            }
+        )
+        .await,
+        Err(BanError::InvalidField)
+    );
+    let banned = ban_user(db.pool(), admin, ban_input(target))
+        .await
+        .expect("administrator bans");
+    assert!(banned.transitioned);
+    assert_eq!(
+        reverse_ban(
+            db.pool(),
+            moderator,
+            ReverseBanInput {
+                user_id: target,
+                reason: "second look".to_owned(),
+                policy_version: "v1".to_owned(),
+                purpose: "forged reversal".to_owned(),
+            }
+        )
+        .await,
+        Err(ReverseBanError::NotPermitted)
+    );
+    assert_eq!(
+        reverse_ban(
+            db.pool(),
+            regular,
+            ReverseBanInput {
+                user_id: target,
+                reason: "second look".to_owned(),
+                policy_version: "v1".to_owned(),
+                purpose: "forged reversal".to_owned(),
+            }
+        )
+        .await,
+        Err(ReverseBanError::NotPermitted)
+    );
+    let target_state: String = sqlx::query_scalar("SELECT state FROM users WHERE id = $1")
+        .bind(target)
+        .fetch_one(db.pool())
+        .await
+        .expect("target reads");
+    assert_eq!(target_state, "banned");
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn banned_parties_cannot_mutate_or_reveal() {
+    let db = TestDatabase::create("p11t05_mute")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p11t05_mute_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let app = test_app(&db);
+    let admin = seed_admin(&app, db.pool(), "+55 11 90000-1106", "+55 11 90000-1107").await;
+    let buyer = provision_active(&app, "+55 11 90000-1108", "Mute Buyer").await;
+    let buyer_cookie = login_cookie(app.clone(), "+55 11 90000-1108").await;
+    let seller = provision_active(&app, "+55 11 90000-1109", "Mute Seller").await;
+    let seller_cookie = login_cookie(app.clone(), "+55 11 90000-1109").await;
+    let (demand, offer) = live_offer(db.pool(), buyer, seller).await;
+
+    // Distinct cascades: the buyer loses the unresolved demand, the seller
+    // loses the live offer, and both lose marketplace standing.
+    let buyer_ban = ban_user(db.pool(), admin, ban_input(buyer))
+        .await
+        .expect("buyer banned");
+    assert_eq!(buyer_ban.cancelled_requests, 1);
+    let seller_ban = ban_user(db.pool(), admin, ban_input(seller))
+        .await
+        .expect("seller banned");
+    // Zero own rows left: the buyer cascade already invalidated this
+    // offer as related, which the terminal reason below confirms.
+    assert_eq!(seller_ban.invalidated_offers, 0);
+    let offer_state: (String, String) =
+        sqlx::query_as("SELECT state, terminal_reason FROM offers WHERE id = $1")
+            .bind(offer)
+            .fetch_one(db.pool())
+            .await
+            .expect("offer reads");
+    assert_eq!(offer_state.0, "invalidated");
+    assert_eq!(offer_state.1, "banned");
+    let demand_state: (String, String) =
+        sqlx::query_as("SELECT state, visibility FROM requests WHERE id = $1")
+            .bind(demand)
+            .fetch_one(db.pool())
+            .await
+            .expect("demand reads");
+    assert_eq!(demand_state, ("cancelled".to_owned(), "hidden".to_owned()));
+
+    // Old sessions and direct operations share one refusal each: banned
+    // parties mutate nothing and reveal no new destination.
+    let (status, refused) = call(
+        app.clone(),
+        "POST",
+        &format!("/api/v1/requests/{demand}/offers/{offer}/contact"),
+        Some(json!({
+            "handoff_id": uuid::Uuid::now_v7().to_string(),
+            "expected_offer_terms": 1,
+            "entry_source": "offer_detail",
+        })),
+        Some(&buyer_cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_no_destination(&refused);
+    let (status, _) = call(
+        app.clone(),
+        "POST",
+        "/api/v1/requests/drafts",
+        Some(json!({
+            "title": "Washing machine",
+            "category_code": "home_appliances",
+            "budget": "800.00",
+            "condition": "either",
+            "city_code": "campinas",
+            "region_code": "centro",
+        })),
+        Some(&seller_cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        submit_offer(
+            db.pool(),
+            seller,
+            demand,
+            OfferInput {
+                revision_number: Some(1),
+                cycle_number: Some(1),
+                description: Some("Late unit".to_owned()),
+                price: Some("500.00".to_owned()),
+                condition: Some("used".to_owned()),
+                city_code: Some("campinas".to_owned()),
+                region_code: Some("centro".to_owned()),
+                notes: None,
+                available: Some(true),
+                available_in_city: Some(true),
+            },
+        )
+        .await,
+        Err(SubmitError::NotActive)
+    );
+    assert_eq!(
+        start_contact(
+            db.pool(),
+            &contact_keys(),
+            buyer,
+            demand,
+            offer,
+            ContactInput {
+                handoff_id: Some(uuid::Uuid::now_v7().to_string()),
+                expected_offer_terms: Some(1),
+                entry_source: Some("offer_detail".to_owned()),
+            },
+        )
+        .await,
+        Err(ContactError::NotActive)
+    );
+    // Bans close even the owner-outcome path: EC-20 stays suspended-only.
+    assert_eq!(
+        close_request(
+            db.pool(),
+            buyer,
+            demand,
+            BuyerOutcome::Found(OutcomeSource::Elsewhere),
+        )
+        .await,
+        Err(CloseError::NotActive)
+    );
+    let contacts: i64 = sqlx::query_scalar("SELECT count(*) FROM contacts")
+        .fetch_one(db.pool())
+        .await
+        .expect("contacts read");
+    assert_eq!(contacts, 0);
+
+    // Notices went out with static bodies: restriction notices to both
+    // banned accounts plus one offers-unavailable notice to the demand
+    // author — alongside the fixture's own offer-received notice — none
+    // carrying reporter or phone material.
+    let notices: Vec<(String, String)> =
+        sqlx::query_as("SELECT kind, body FROM notices ORDER BY created_at")
+            .fetch_all(db.pool())
+            .await
+            .expect("notices read");
+    assert_eq!(notices.len(), 4);
+    let mut kinds: Vec<&str> = notices.iter().map(|(kind, _)| kind.as_str()).collect();
+    kinds.sort_unstable();
+    assert_eq!(
+        kinds,
+        [
+            "account.restricted",
+            "account.restricted",
+            "offer.received",
+            "offer.unavailable"
+        ]
+    );
+    for (kind, body) in &notices {
+        if kind == "account.restricted" || kind == "offer.unavailable" {
+            assert!(body.contains("safety review"));
+        }
+        for absent in ["reporter", "phone", "90000", "55119", "token", "cipher"] {
+            assert!(!body.contains(absent), "no {absent} in notice body");
+        }
+    }
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn ban_winning_contact_race_refuses_history_remains() {
+    let db = TestDatabase::create("p11t05_banrace")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p11t05_banrace_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let app = test_app(&db);
+    let admin = seed_admin(&app, db.pool(), "+55 11 90000-1110", "+55 11 90000-1111").await;
+    let buyer = provision_active(&app, "+55 11 90000-1112", "Race Buyer").await;
+    let seller = provision_active(&app, "+55 11 90000-1113", "Race Seller").await;
+    let (demand, offer) = live_offer(db.pool(), buyer, seller).await;
+
+    // A ban races with contact initiation: the barrier releases both at
+    // once. A winning ban refuses with a defined error and records no
+    // contact; a winning contact keeps exactly one legitimate initiation
+    // before the ban lands, with history byte-identical afterwards.
+    let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(2));
+    let ban = |barrier: std::sync::Arc<tokio::sync::Barrier>| {
+        let pool = db.pool().clone();
+        async move {
+            barrier.wait().await;
+            ban_user(&pool, admin, ban_input(seller)).await
+        }
+    };
+    let handoff = |barrier: std::sync::Arc<tokio::sync::Barrier>| {
+        let pool = db.pool().clone();
+        async move {
+            barrier.wait().await;
+            start_contact(
+                &pool,
+                &contact_keys(),
+                buyer,
+                demand,
+                offer,
+                ContactInput {
+                    handoff_id: Some(uuid::Uuid::now_v7().to_string()),
+                    expected_offer_terms: Some(1),
+                    entry_source: Some("offer_detail".to_owned()),
+                },
+            )
+            .await
+        }
+    };
+    let (banned, started) = tokio::join!(ban(std::sync::Arc::clone(&barrier)), handoff(barrier),);
+    assert!(banned.is_ok(), "ban lands in every branch");
+    match started {
+        Ok(handoff) => {
+            assert!(!handoff.repeat);
+            let rows: Vec<(uuid::Uuid, i64)> =
+                sqlx::query_as("SELECT id, offer_price_cents FROM contacts WHERE offer_id = $1")
+                    .bind(offer)
+                    .fetch_all(db.pool())
+                    .await
+                    .expect("contacts read");
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0].0, handoff.contact_id);
+            assert_eq!(rows[0].1, 52_000);
+        }
+        Err(ContactError::SellerNotActive) => {
+            let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM contacts WHERE offer_id = $1")
+                .bind(offer)
+                .fetch_one(db.pool())
+                .await
+                .expect("contacts read");
+            assert_eq!(rows, 0);
+        }
+        outcome => panic!("unexpected race outcome: {outcome:?}"),
+    }
+    let seller_state: String = sqlx::query_scalar("SELECT state FROM users WHERE id = $1")
+        .bind(seller)
+        .fetch_one(db.pool())
+        .await
+        .expect("seller reads");
+    assert_eq!(seller_state, "banned");
+    let offer_state: String = sqlx::query_scalar("SELECT state FROM offers WHERE id = $1")
+        .bind(offer)
+        .fetch_one(db.pool())
+        .await
+        .expect("offer reads");
+    assert_eq!(offer_state, "invalidated");
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn reversal_restores_only_account_eligibility() {
+    let db = TestDatabase::create("p11t05_reverse")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p11t05_reverse_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let app = test_app(&db);
+    let admin = seed_admin(&app, db.pool(), "+55 11 90000-1114", "+55 11 90000-1115").await;
+    let buyer = provision_active(&app, "+55 11 90000-1116", "Reverse Buyer").await;
+    let seller = provision_active(&app, "+55 11 90000-1117", "Reverse Seller").await;
+    let (demand, offer) = live_offer(db.pool(), buyer, seller).await;
+    ban_user(db.pool(), admin, ban_input(seller))
+        .await
+        .expect("seller banned");
+
+    // Formal reversal restores the account row only: the invalidated offer
+    // stays terminal with its reason, and its handoff still refuses.
+    let reversed = reverse_ban(
+        db.pool(),
+        admin,
+        ReverseBanInput {
+            user_id: seller,
+            reason: "new exonerating evidence".to_owned(),
+            policy_version: "v1".to_owned(),
+            purpose: "formal reversal".to_owned(),
+        },
+    )
+    .await
+    .expect("administrator reverses");
+    assert!(reversed.reversed);
+    let seller_state: String = sqlx::query_scalar("SELECT state FROM users WHERE id = $1")
+        .bind(seller)
+        .fetch_one(db.pool())
+        .await
+        .expect("seller reads");
+    assert_eq!(seller_state, "active");
+    let offer_state: (String, String) =
+        sqlx::query_as("SELECT state, terminal_reason FROM offers WHERE id = $1")
+            .bind(offer)
+            .fetch_one(db.pool())
+            .await
+            .expect("offer reads");
+    assert_eq!(offer_state.0, "invalidated");
+    assert_eq!(offer_state.1, "banned");
+    // Only the owning buyer initiates: the old handoff refuses on the
+    // terminal offer, and a fresh eligible cycle flows for the restored
+    // account.
+    let buyer_cookie = login_cookie(app.clone(), "+55 11 90000-1116").await;
+    let (status, refused) = call(
+        app.clone(),
+        "POST",
+        &format!("/api/v1/requests/{demand}/offers/{offer}/contact"),
+        Some(json!({
+            "handoff_id": uuid::Uuid::now_v7().to_string(),
+            "expected_offer_terms": 1,
+            "entry_source": "offer_detail",
+        })),
+        Some(&buyer_cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_no_destination(&refused);
+
+    // Reversing an active row converges, and a fresh eligible cycle flows
+    // normally for the restored account.
+    let again = reverse_ban(
+        db.pool(),
+        admin,
+        ReverseBanInput {
+            user_id: seller,
+            reason: "repeat reversal".to_owned(),
+            policy_version: "v1".to_owned(),
+            purpose: "idempotent reversal".to_owned(),
+        },
+    )
+    .await
+    .expect("repeat reversal converges");
+    assert!(!again.reversed);
+    let (fresh_demand, fresh_offer) = live_offer(db.pool(), buyer, seller).await;
+    let (status, fresh) = call(
+        app.clone(),
+        "POST",
+        &format!("/api/v1/requests/{fresh_demand}/offers/{fresh_offer}/contact"),
+        Some(json!({
+            "handoff_id": uuid::Uuid::now_v7().to_string(),
+            "expected_offer_terms": 1,
+            "entry_source": "offer_detail",
+        })),
+        Some(&buyer_cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(fresh["repeat"], false);
     db.cleanup().await.expect("suite cleans up");
 }
