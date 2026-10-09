@@ -97,6 +97,8 @@ pub mod application {
     pub mod restore_content;
     /// Timed account restoration: lift the account, never the resources.
     pub mod restore_user;
+    /// Retention classification and reviewed holds: windows with owners.
+    pub mod retention_policy;
     /// Formal ban reversal: restore the account, never the terminal past.
     pub mod reverse_ban;
     /// Request revisions: material classification with preserved history.
