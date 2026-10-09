@@ -55,6 +55,8 @@ pub mod application {
     pub mod feedback;
     /// Durable per-action deduplication (same key/body replays, changed body conflicts).
     pub mod idempotency;
+    /// Mature cohort denominators and primary metrics: exact ratios only.
+    pub mod metrics;
     /// Prioritized case review and dispositions: human decisions.
     pub mod moderation_review;
     /// Private notice reads: owner lists and acknowledgments.
@@ -151,6 +153,8 @@ pub mod persistence {
     pub mod eligibility;
     /// Durable business events recorded with their mutation.
     pub mod events;
+    /// Cohort measurement reads: per-request windows over durable facts.
+    pub mod metrics;
     /// Compile-time migration journal and append-only runner.
     pub mod migrations;
     /// In-product per-recipient notices with scoped acknowledgment.
