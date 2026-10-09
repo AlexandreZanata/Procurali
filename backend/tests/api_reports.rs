@@ -25,10 +25,14 @@ mod database;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use database::TestDatabase;
+use procurali_backend::application::block_user::block_user;
 use procurali_backend::application::close_request::{close_request, BuyerOutcome, OutcomeSource};
 use procurali_backend::application::create_report::{submit_report, ReportInput, SubmitError};
 use procurali_backend::application::eligibility::{check_actor, CheckOutcome};
 use procurali_backend::application::phone_verification::FakeVerifyProvider;
+use procurali_backend::application::report_updates::{
+    submit_grouped_report, withdraw_report, GroupError,
+};
 use procurali_backend::http::accounts::{routes as account_routes, AccountsState};
 use procurali_backend::http::auth::{routes as auth_routes, AuthState};
 use procurali_backend::http::contacts::{routes as contact_routes, ContactsState};
@@ -624,5 +628,229 @@ async fn suspended_banned_keep_only_own_history_path() {
         .await
         .expect("buyer reads");
     assert_eq!(buyer_state, "banned", "reporting lifted no restriction");
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn duplicate_filings_group_into_one_case() {
+    let db = TestDatabase::create("p10t05_grouped")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p10t05_grouped_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let app = test_app(&db);
+    let buyer_one = provision_active(&app, "+55 11 90000-0601", "Grouped Buyer One").await;
+    let buyer_one_cookie = login_cookie(app.clone(), "+55 11 90000-0601").await;
+    provision_active(&app, "+55 11 90000-0602", "Grouped Seller").await;
+    let seller_cookie = login_cookie(app.clone(), "+55 11 90000-0602").await;
+    let seller: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM users WHERE display_name = 'Grouped Seller'")
+            .fetch_one(db.pool())
+            .await
+            .expect("seller reads");
+    provision_active(&app, "+55 11 90000-0603", "Grouped Buyer Two").await;
+    let buyer_two_cookie = login_cookie(app.clone(), "+55 11 90000-0603").await;
+    let buyer_two: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM users WHERE display_name = 'Grouped Buyer Two'")
+            .fetch_one(db.pool())
+            .await
+            .expect("second buyer reads");
+    let (_, offer_one) = live_demand(&app, &buyer_one_cookie, &seller_cookie).await;
+    let (_, offer_two) = live_demand(&app, &buyer_two_cookie, &seller_cookie).await;
+    let _ = (buyer_one, buyer_two, offer_two);
+
+    // Same reporter refiles the same offer incident through the grouped
+    // writer: one intake, the refiling as a duplicate information record.
+    let first = submit_grouped_report(
+        db.pool(),
+        buyer_one,
+        ReportInput {
+            target_kind: "offer".to_owned(),
+            target_id: offer_one.parse().expect("offer id parses"),
+            reason: "spam".to_owned(),
+            detail: "first noise".to_owned(),
+        },
+    )
+    .await
+    .expect("first filing opens the intake");
+    assert_eq!(first.status, "open");
+    let repeat = submit_grouped_report(
+        db.pool(),
+        buyer_one,
+        ReportInput {
+            target_kind: "offer".to_owned(),
+            target_id: offer_one.parse().expect("offer id parses"),
+            reason: "spam".to_owned(),
+            detail: "still noisy".to_owned(),
+        },
+    )
+    .await
+    .expect("refiling adds information");
+    assert_eq!(repeat.case_id, first.case_id, "one incident intake");
+    assert_eq!(repeat.status, "duplicate");
+
+    // Two buyers with their own seller history report the same seller for
+    // the same reason: one user incident, both sources retained privately.
+    let buyer_one_user = submit_grouped_report(
+        db.pool(),
+        buyer_one,
+        ReportInput {
+            target_kind: "user".to_owned(),
+            target_id: seller,
+            reason: "spam".to_owned(),
+            detail: "buyer one context".to_owned(),
+        },
+    )
+    .await
+    .expect("first user filing opens its intake");
+    let buyer_two_user = submit_grouped_report(
+        db.pool(),
+        buyer_two,
+        ReportInput {
+            target_kind: "user".to_owned(),
+            target_id: seller,
+            reason: "spam".to_owned(),
+            detail: "buyer two context".to_owned(),
+        },
+    )
+    .await
+    .expect("second reporter groups in");
+    assert_eq!(
+        buyer_two_user.case_id, buyer_one_user.case_id,
+        "different reporters share one case"
+    );
+    assert_eq!(buyer_two_user.status, "open");
+    let members: Vec<(uuid::Uuid, String)> = sqlx::query_as(
+        "SELECT reporter_id, detail FROM reports WHERE case_id = $1 ORDER BY created_at",
+    )
+    .bind(buyer_one_user.case_id)
+    .fetch_all(db.pool())
+    .await
+    .expect("grouped sources read");
+    assert_eq!(members.len(), 2);
+    assert_ne!(members[0].0, members[1].0, "sources stay distinct");
+    assert_ne!(members[0].1, members[1].1, "contexts stay distinct");
+
+    // Volume alone bans nobody and assesses nothing by itself.
+    assert_eq!(case_count(db.pool()).await, 2);
+    assert_eq!(report_count(db.pool()).await, 4);
+    let seller_state: String = sqlx::query_scalar("SELECT state FROM users WHERE id = $1")
+        .bind(seller)
+        .fetch_one(db.pool())
+        .await
+        .expect("seller reads");
+    assert_eq!(seller_state, "active");
+    let case_statuses: Vec<String> =
+        sqlx::query_scalar("SELECT status FROM report_cases ORDER BY created_at")
+            .fetch_all(db.pool())
+            .await
+            .expect("case standings read");
+    assert!(case_statuses.iter().all(|status| status == "open"));
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn withdrawal_preserves_evidence_and_restrictions() {
+    let db = TestDatabase::create("p10t05_withdrawn")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p10t05_withdrawn_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let app = test_app(&db);
+    let buyer = provision_active(&app, "+55 11 90000-0604", "Withdraw Buyer").await;
+    let buyer_cookie = login_cookie(app.clone(), "+55 11 90000-0604").await;
+    provision_active(&app, "+55 11 90000-0605", "Withdraw Seller").await;
+    let seller_cookie = login_cookie(app.clone(), "+55 11 90000-0605").await;
+    let seller: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM users WHERE display_name = 'Withdraw Seller'")
+            .fetch_one(db.pool())
+            .await
+            .expect("seller reads");
+    provision_active(&app, "+55 11 90000-0606", "Withdraw Stranger").await;
+    let stranger: uuid::Uuid =
+        sqlx::query_scalar("SELECT id FROM users WHERE display_name = 'Withdraw Stranger'")
+            .fetch_one(db.pool())
+            .await
+            .expect("stranger reads");
+    let (_, offer) = live_demand(&app, &buyer_cookie, &seller_cookie).await;
+    let (status, filed) =
+        file_offer_report(&app, &offer, "spam", "withdrawn noise", &buyer_cookie).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let report_id: uuid::Uuid = filed["id"]
+        .as_str()
+        .expect("receipt carries id")
+        .parse()
+        .expect("receipt id parses");
+    let case_id: uuid::Uuid = filed["case_id"]
+        .as_str()
+        .expect("receipt carries case")
+        .parse()
+        .expect("receipt case parses");
+
+    // A live pair block stands before withdrawal: withdrawing must not
+    // clear it.
+    let blocked = block_user(db.pool(), buyer, seller)
+        .await
+        .expect("block records");
+    assert!(blocked.created);
+
+    // The filing reporter withdraws: evidence stays, review continues, the
+    // restriction stands, and a repeat withdrawal converges idempotently.
+    let withdrawn = withdraw_report(db.pool(), buyer, report_id)
+        .await
+        .expect("own withdrawal records");
+    assert_eq!(withdrawn.status, "withdrawn");
+    assert_eq!(withdrawn.detail, "withdrawn noise");
+    assert_eq!(withdrawn.target_title_snapshot, "Frost-free 300L");
+    let reread: (String, String, String) =
+        sqlx::query_as("SELECT status, detail, target_title_snapshot FROM reports WHERE id = $1")
+            .bind(report_id)
+            .fetch_one(db.pool())
+            .await
+            .expect("withdrawn report still reads");
+    assert_eq!(
+        reread,
+        (
+            "withdrawn".to_owned(),
+            "withdrawn noise".to_owned(),
+            "Frost-free 300L".to_owned()
+        )
+    );
+    let case_status: String = sqlx::query_scalar("SELECT status FROM report_cases WHERE id = $1")
+        .bind(case_id)
+        .fetch_one(db.pool())
+        .await
+        .expect("case still reads");
+    assert_eq!(case_status, "open", "review continues independently");
+    let block_stands: Option<i32> =
+        sqlx::query_scalar("SELECT 1 FROM user_blocks WHERE blocker_id = $1 AND blocked_id = $2")
+            .bind(buyer)
+            .bind(seller)
+            .fetch_optional(db.pool())
+            .await
+            .expect("block reads");
+    assert!(block_stands.is_some(), "withdrawal clears no restriction");
+    let again = withdraw_report(db.pool(), buyer, report_id)
+        .await
+        .expect("repeat withdrawal converges");
+    assert_eq!(again, withdrawn);
+    assert_eq!(report_count(db.pool()).await, 1);
+
+    // Foreign hands cannot withdraw: the stranger's attempt refuses with
+    // the row untouched.
+    assert_eq!(
+        withdraw_report(db.pool(), stranger, report_id).await,
+        Err(GroupError::NotPermitted)
+    );
+    assert_eq!(
+        withdraw_report(db.pool(), buyer, uuid::Uuid::now_v7()).await,
+        Err(GroupError::NotFound)
+    );
     db.cleanup().await.expect("suite cleans up");
 }
