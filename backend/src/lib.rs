@@ -47,6 +47,8 @@ pub mod application {
     pub mod offer_limits;
     /// Private offer comparison reads: buyer sets and seller self-views.
     pub mod offer_reads;
+    /// Pair interaction guard: live eligibility plus active blocks.
+    pub mod pair_eligibility;
     /// Phone-verification provider boundary with a restricted deterministic fake.
     pub mod phone_verification;
     /// Declared professional classification, free and separate.
@@ -95,6 +97,8 @@ pub mod application {
 
 /// SQLx repositories, migrations, pool, and transaction machinery.
 pub mod persistence {
+    /// Pair-block persistence: writes with distinct-user guarantees.
+    pub mod blocks;
     /// Category and locality catalogs with stable identities.
     pub mod catalogs;
     /// Private contact initiations with frozen snapshots.
