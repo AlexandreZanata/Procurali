@@ -109,6 +109,8 @@ pub mod application {
     pub mod revise_request;
     /// Session lifecycle: login after proof and current-state authentication.
     pub mod sessions;
+    /// Share-intent preparation: stable links, safe messages, no recipients.
+    pub mod share_request;
     /// Scoped staff grants with purpose audit: explicit powers, no self-service.
     pub mod staff_permissions;
     /// Guarded contact initiation: the author's handoff on live matching terms.
@@ -199,6 +201,8 @@ pub mod http {
     pub mod requests;
     /// Router with explicit size/time bounds and stable errors.
     pub mod router;
+    /// Share-intent routes: prepared messages without recipients.
+    pub mod shares;
 }
 
 /// Validated configuration, redacted logging, lifecycle, and workers.
