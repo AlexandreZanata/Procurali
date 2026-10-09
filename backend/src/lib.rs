@@ -21,6 +21,8 @@ pub mod domain {
 
 /// Business operations owning eligibility and transaction boundaries.
 pub mod application {
+    /// Bounded appeals and accountable corrections: review without rewriting.
+    pub mod appeals;
     /// Bounded verification abuse controls (guarded challenge flows).
     pub mod auth_limits;
     /// Permanent bans: admin-only indefinite exclusion with distinct cascades.
