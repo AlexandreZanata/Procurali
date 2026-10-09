@@ -22,8 +22,13 @@ use procurali_backend::application::close_request::{
     close_request, BuyerOutcome, CloseError, DeclaredOutcome, OutcomeSource,
 };
 use procurali_backend::application::publish_request::publish_request;
+use procurali_backend::application::record_outcome::{
+    record_outcome, CompletionSource, OutcomeAnswer, OutcomeError,
+};
 use procurali_backend::application::request_drafts::{create_draft, DraftInput};
 use procurali_backend::application::request_eligibility::expire_if_elapsed;
+use procurali_backend::application::start_contact::{start_contact, ContactInput};
+use procurali_backend::application::submit_offer::{submit_offer, OfferInput};
 use procurali_backend::persistence::catalogs::{upsert_city, upsert_region};
 use procurali_backend::persistence::requests::{cycles_for_request, request as read_request};
 use procurali_backend::persistence::users::{create_user, NewUser, PhoneKeys};
@@ -324,5 +329,271 @@ async fn suspended_buyer_completes_without_restoring_contact() {
             .collect();
         assert_eq!(kinds, ["request.published", "request.completed"]);
     }
+    db.cleanup().await.expect("suite cleans up");
+}
+
+fn outcome_keys() -> PhoneKeys<'static> {
+    PhoneKeys {
+        lookup_key: "p06t06-test-only-lookup-key",
+        encryption_key: "p06t06-test-only-encryption-key",
+    }
+}
+
+async fn outcome_rows(
+    pool: &sqlx::PgPool,
+    request_id: uuid::Uuid,
+) -> Vec<(String, Option<String>)> {
+    sqlx::query_as(
+        "SELECT outcome, source FROM request_outcomes
+         WHERE request_id = $1 ORDER BY created_at, id",
+    )
+    .bind(request_id)
+    .fetch_all(pool)
+    .await
+    .expect("outcomes read")
+}
+
+/// Publish one either/600 demand plus one used/520 offer through the real
+/// paths; return both ids.
+async fn demand_with_offer(
+    pool: &sqlx::PgPool,
+    author: uuid::Uuid,
+    seller: uuid::Uuid,
+    title: &str,
+) -> (uuid::Uuid, uuid::Uuid) {
+    let request_id = publish_open(pool, author, title).await;
+    let offer_id = submit_offer(
+        pool,
+        seller,
+        request_id,
+        OfferInput {
+            revision_number: Some(1),
+            cycle_number: Some(1),
+            description: Some("Frost-free 300L".to_owned()),
+            price: Some("520.00".to_owned()),
+            condition: Some("used".to_owned()),
+            city_code: Some("campinas".to_owned()),
+            region_code: Some("centro".to_owned()),
+            notes: None,
+            available: Some(true),
+            available_in_city: Some(true),
+        },
+    )
+    .await
+    .expect("fixture submission submits")
+    .id;
+    (request_id, offer_id)
+}
+
+async fn contact_once(
+    pool: &sqlx::PgPool,
+    buyer: uuid::Uuid,
+    request_id: uuid::Uuid,
+    offer_id: uuid::Uuid,
+) {
+    start_contact(
+        pool,
+        &outcome_keys(),
+        buyer,
+        request_id,
+        offer_id,
+        ContactInput {
+            handoff_id: Some(uuid::Uuid::now_v7().to_string()),
+            expected_offer_terms: Some(1),
+            entry_source: Some("offer_detail".to_owned()),
+        },
+    )
+    .await
+    .expect("fixture handoff starts");
+}
+
+#[tokio::test]
+async fn completion_without_offers_credits_no_seller() {
+    let db = TestDatabase::create("p09t01_solo")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p09t01_solo_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let author = seed_author(db.pool(), "Solo Owner", "+55 11 90000-0301").await;
+    let id = publish_open(db.pool(), author, "Refrigerator").await;
+
+    // Completion with no offer in play records an unattributed outcome and
+    // completes the row; repeating it returns the same row with nothing new.
+    let recorded = record_outcome(
+        db.pool(),
+        author,
+        id,
+        OutcomeAnswer::Completed(CompletionSource::Elsewhere),
+    )
+    .await
+    .expect("unattributed completion records");
+    assert_eq!(recorded.outcome, "completed");
+    assert_eq!(recorded.source.as_deref(), Some("elsewhere"));
+    assert_eq!(recorded.attributed_offer_id, None);
+    assert_eq!(recorded.supersedes, None);
+    let stored = read_request(db.pool(), id)
+        .await
+        .expect("request reads")
+        .expect("request reads");
+    assert_eq!(stored.state, "completed");
+    let repeat = record_outcome(
+        db.pool(),
+        author,
+        id,
+        OutcomeAnswer::Completed(CompletionSource::Elsewhere),
+    )
+    .await
+    .expect("repeat returns standing outcome");
+    assert_eq!(repeat.id, recorded.id);
+    assert_eq!(outcome_rows(db.pool(), id).await.len(), 1);
+    // Nothing exists to credit: no offers, no contacts, no sellers touched.
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM offers")
+            .fetch_one(db.pool())
+            .await
+            .expect("offers read"),
+        0
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM contacts")
+            .fetch_one(db.pool())
+            .await
+            .expect("contacts read"),
+        0
+    );
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn uncontacted_foreign_attribution_is_refused() {
+    let db = TestDatabase::create("p09t01_credit")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p09t01_credit_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let author = seed_author(db.pool(), "Credit Owner", "+55 11 90000-0302").await;
+    let seller = seed_author(db.pool(), "Credit Seller", "+55 11 90000-0303").await;
+    let (request_id, offer_id) = demand_with_offer(db.pool(), author, seller, "Refrigerator").await;
+
+    // An uncontacted offer cannot receive credit, and neither can a foreign
+    // one; both refusals leave the row active with no outcome stored.
+    assert_eq!(
+        record_outcome(
+            db.pool(),
+            author,
+            request_id,
+            OutcomeAnswer::Completed(CompletionSource::Platform { offer_id }),
+        )
+        .await,
+        Err(OutcomeError::AttributionRefused)
+    );
+    let (foreign_request, foreign_offer) =
+        demand_with_offer(db.pool(), author, seller, "Spare Fridge").await;
+    assert_eq!(
+        record_outcome(
+            db.pool(),
+            author,
+            request_id,
+            OutcomeAnswer::Completed(CompletionSource::Platform {
+                offer_id: foreign_offer,
+            }),
+        )
+        .await,
+        Err(OutcomeError::AttributionRefused)
+    );
+    assert!(outcome_rows(db.pool(), request_id).await.is_empty());
+    // A historical contact unlocks exactly its offer: credited, recorded,
+    // and completed together.
+    contact_once(db.pool(), author, request_id, offer_id).await;
+    let recorded = record_outcome(
+        db.pool(),
+        author,
+        request_id,
+        OutcomeAnswer::Completed(CompletionSource::Platform { offer_id }),
+    )
+    .await
+    .expect("contacted attribution records");
+    assert_eq!(recorded.attributed_offer_id, Some(offer_id));
+    assert_eq!(recorded.source.as_deref(), Some("platform"));
+    let _ = (foreign_request, foreign_offer);
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn suspended_expired_record_while_restricted() {
+    let db = TestDatabase::create("p09t01_restricted")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p09t01_restricted_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let author = seed_author(db.pool(), "Restricted Owner", "+55 11 90000-0304").await;
+
+    // A suspended row records its permitted result with visibility exactly
+    // as it was: restriction respected, outcome stored.
+    let suspended = publish_open(db.pool(), author, "Paused Fridge").await;
+    sqlx::query("UPDATE requests SET state = 'suspended' WHERE id = $1")
+        .bind(suspended)
+        .execute(db.pool())
+        .await
+        .expect("synthetic suspension applies");
+    let recorded = record_outcome(db.pool(), author, suspended, OutcomeAnswer::Cancelled)
+        .await
+        .expect("suspended cancellation records");
+    assert_eq!(recorded.outcome, "cancelled");
+    let stored = read_request(db.pool(), suspended)
+        .await
+        .expect("request reads")
+        .expect("request reads");
+    assert_eq!(
+        (stored.state.as_str(), stored.visibility.as_str()),
+        ("cancelled", "public")
+    );
+
+    // An expired row records too, and corrections chain: unresolved first,
+    // then completion superseding it, then a silent repeat.
+    let lapsed = publish_open(db.pool(), author, "Lapsed Fridge").await;
+    let now = chrono::Utc::now();
+    sqlx::query(
+        "UPDATE request_cycles SET started_at = $2, deadline = $3
+         WHERE request_id = $1 AND cycle_number = 1",
+    )
+    .bind(lapsed)
+    .bind(now - chrono::Duration::days(8))
+    .bind(now - chrono::Duration::days(1))
+    .execute(db.pool())
+    .await
+    .expect("synthetic expiry applies");
+    let first = record_outcome(db.pool(), author, lapsed, OutcomeAnswer::Unresolved)
+        .await
+        .expect("unresolved records");
+    assert_eq!(first.supersedes, None);
+    let second = record_outcome(
+        db.pool(),
+        author,
+        lapsed,
+        OutcomeAnswer::Completed(CompletionSource::Unknown),
+    )
+    .await
+    .expect("completion corrects");
+    assert_eq!(second.supersedes, Some(first.id));
+    let repeat = record_outcome(
+        db.pool(),
+        author,
+        lapsed,
+        OutcomeAnswer::Completed(CompletionSource::Unknown),
+    )
+    .await
+    .expect("repeat returns standing outcome");
+    assert_eq!(repeat.id, second.id);
+    assert_eq!(outcome_rows(db.pool(), lapsed).await.len(), 2);
     db.cleanup().await.expect("suite cleans up");
 }
