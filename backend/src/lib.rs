@@ -119,6 +119,8 @@ pub mod persistence {
     pub mod phone_history;
     /// Bounded pools, redacted handling, and liveness probes.
     pub mod pool;
+    /// Report and case intake: allegations with grouped identity.
+    pub mod reports;
     /// Request ownership, requirement revisions, and activation cycles.
     pub mod requests;
     /// Bounded serializable transaction retry (DEC-0003 machinery).
