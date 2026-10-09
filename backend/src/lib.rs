@@ -29,6 +29,8 @@ pub mod application {
     pub mod clock;
     /// Buyer closure: completion and cancellation as declared outcomes.
     pub mod close_request;
+    /// Distinct contact allowance: comparison without bulk collection.
+    pub mod contact_limits;
     /// Idempotent contact replay: the same action returns its result, renewed.
     pub mod contact_replay;
     /// Exact duplicate demand: normalized same-owner open-need matching.
