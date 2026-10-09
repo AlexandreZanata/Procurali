@@ -612,3 +612,265 @@ async fn stale_terms_acknowledgment_is_conflict() {
     assert_no_destination(&body);
     db.cleanup().await.expect("suite cleans up");
 }
+
+/// Handoff preparation: current terms in, safe context out, honest failures.
+mod preparation {
+    use super::*;
+    use procurali_backend::application::start_contact::{start_contact, ContactInput};
+    use procurali_backend::application::whatsapp_handoff::{
+        handoff_message, prepare_destination, record_preparation_failure, whatsapp_url,
+        CACHE_DIRECTIVE,
+    };
+    use procurali_backend::persistence::users::PhoneKeys;
+
+    fn keys<'a>() -> PhoneKeys<'a> {
+        PhoneKeys {
+            lookup_key: "p08t02-test-only-lookup-key",
+            encryption_key: "p08t02-test-only-encryption-key",
+        }
+    }
+
+    async fn seller_ciphertext(pool: &sqlx::PgPool, display: &str) -> Vec<u8> {
+        sqlx::query_scalar("SELECT phone_ciphertext FROM users WHERE display_name = $1")
+            .bind(display)
+            .fetch_one(pool)
+            .await
+            .expect("ciphertext reads")
+    }
+
+    #[tokio::test]
+    async fn contextual_message_carries_current_terms() {
+        let db = TestDatabase::create("p08t03_message")
+            .await
+            .expect("disposable database allocates");
+        assert!(
+            db.name().starts_with("procurali_test_p08t03_message_"),
+            "known suite identity in the database name"
+        );
+        seed_catalog(db.pool()).await;
+        let app = test_app(&db);
+        provision_active(&app, "+55 11 90000-0241", "Message Owner").await;
+        let buyer_cookie = login_cookie(app.clone(), "+55 11 90000-0241").await;
+        provision_active(&app, "+55 11 90000-0242", "Message Seller").await;
+        let seller_cookie = login_cookie(app.clone(), "+55 11 90000-0242").await;
+        let demand = publish_demand(&app, &buyer_cookie).await;
+        let offer = submit_offer(&app, &demand, &seller_cookie).await;
+        let offer_id: uuid::Uuid = offer.parse().expect("id parses");
+
+        // The message renders current terms exactly, with no private or
+        // link material — verified against the stored row, not a fixture.
+        let stored: (String, i64, String) = sqlx::query_as(
+            "SELECT description, price_cents, \"condition\" FROM offers WHERE id = $1",
+        )
+        .bind(offer_id)
+        .fetch_one(db.pool())
+        .await
+        .expect("terms read");
+        let message = handoff_message(&stored.0, stored.1, &stored.2);
+        assert!(message.contains("Frost-free 300L"));
+        assert!(message.contains("520.00"));
+        assert!(message.contains("used"));
+        for absent in [
+            "+55", "90000", "http", "wa.me", "offer/", "phone", "address", "token",
+        ] {
+            assert!(!message.contains(absent), "no {absent} in handoff message");
+        }
+        // After a real terms edit, the rebuilt message tracks currency.
+        let seller: uuid::Uuid =
+            sqlx::query_scalar("SELECT id FROM users WHERE display_name = 'Message Seller'")
+                .fetch_one(db.pool())
+                .await
+                .expect("seller reads");
+        procurali_backend::application::edit_offer::edit_offer(
+            db.pool(),
+            seller,
+            offer_id,
+            procurali_backend::application::edit_offer::EditTermsInput {
+                expected_terms_number: Some(1),
+                description: Some("Frost-free 300L".to_owned()),
+                price: Some("550.00".to_owned()),
+                condition: Some("used".to_owned()),
+                city_code: Some("campinas".to_owned()),
+                region_code: Some("centro".to_owned()),
+                notes: None,
+            },
+        )
+        .await
+        .expect("fixture edit edits");
+        let stored: (String, i64, String) = sqlx::query_as(
+            "SELECT description, price_cents, \"condition\" FROM offers WHERE id = $1",
+        )
+        .bind(offer_id)
+        .fetch_one(db.pool())
+        .await
+        .expect("terms read");
+        let rebuilt = handoff_message(&stored.0, stored.1, &stored.2);
+        assert!(rebuilt.contains("550.00"));
+        assert!(!rebuilt.contains("520.00"));
+        // The chat URL wraps digits plus the encoded message, transiently.
+        let url = whatsapp_url("+55 11 90000-0242", &rebuilt);
+        assert!(url.starts_with("https://wa.me/5511900000242?text="));
+        assert!(!url.contains(' '));
+        db.cleanup().await.expect("suite cleans up");
+    }
+
+    #[tokio::test]
+    async fn preparation_failure_creates_no_contact() {
+        let db = TestDatabase::create("p08t03_failure")
+            .await
+            .expect("disposable database allocates");
+        assert!(
+            db.name().starts_with("procurali_test_p08t03_failure_"),
+            "known suite identity in the database name"
+        );
+        seed_catalog(db.pool()).await;
+        let app = test_app(&db);
+        provision_active(&app, "+55 11 90000-0243", "Failure Owner").await;
+        let buyer: uuid::Uuid =
+            sqlx::query_scalar("SELECT id FROM users WHERE display_name = 'Failure Owner'")
+                .fetch_one(db.pool())
+                .await
+                .expect("buyer reads");
+        provision_active(&app, "+55 11 90000-0244", "Failure Seller").await;
+        let buyer_cookie = login_cookie(app.clone(), "+55 11 90000-0243").await;
+        let demand = publish_demand(&app, &buyer_cookie).await;
+        let seller_cookie = login_cookie(app.clone(), "+55 11 90000-0244").await;
+        let offer = submit_offer(&app, &demand, &seller_cookie).await;
+        let offer_id: uuid::Uuid = offer.parse().expect("id parses");
+        let ciphertext = seller_ciphertext(db.pool(), "Failure Seller").await;
+
+        // A wrong key cannot open the destination; a well-formed but
+        // non-phone payload decrypts yet stays unusable.
+        assert!(prepare_destination(db.pool(), &ciphertext, "wrong-key")
+            .await
+            .is_err());
+        let fake: Vec<u8> = sqlx::query_scalar("SELECT pgp_sym_encrypt('not-a-phone', $1)")
+            .bind("p08t02-test-only-encryption-key")
+            .fetch_one(db.pool())
+            .await
+            .expect("fake ciphertext builds");
+        assert!(
+            prepare_destination(db.pool(), &fake, "p08t02-test-only-encryption-key")
+                .await
+                .is_err()
+        );
+        // The control opens with the current keys.
+        let usable = prepare_destination(db.pool(), &ciphertext, "p08t02-test-only-encryption-key")
+            .await
+            .expect("current destination prepares");
+        assert!(usable.contains("5511900000244"));
+
+        // Known failures record separately with zero contact footprint:
+        // no row, no repeat, no initiation metric of any kind.
+        record_preparation_failure(
+            db.pool(),
+            buyer,
+            offer_id,
+            procurali_backend::application::whatsapp_handoff::PreparationFailure::Undecryptable,
+        )
+        .await
+        .expect("failure records");
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM contacts")
+                .fetch_one(db.pool())
+                .await
+                .expect("contacts read"),
+            0
+        );
+        let failed: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM business_events WHERE kind = 'contact.preparation_failed'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .expect("failure facts read");
+        assert_eq!(failed, 1);
+        let initiated: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM business_events WHERE resource_kind = 'contact'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .expect("contact facts read");
+        assert_eq!(initiated, 0);
+        db.cleanup().await.expect("suite cleans up");
+    }
+
+    #[tokio::test]
+    async fn destination_absent_from_public_surfaces() {
+        let db = TestDatabase::create("p08t03_surfaces")
+            .await
+            .expect("disposable database allocates");
+        assert!(
+            db.name().starts_with("procurali_test_p08t03_surfaces_"),
+            "known suite identity in the database name"
+        );
+        seed_catalog(db.pool()).await;
+        let app = test_app(&db);
+        provision_active(&app, "+55 11 90000-0245", "Surface Owner").await;
+        let buyer_cookie = login_cookie(app.clone(), "+55 11 90000-0245").await;
+        provision_active(&app, "+55 11 90000-0246", "Surface Seller").await;
+        let seller_cookie = login_cookie(app.clone(), "+55 11 90000-0246").await;
+        let buyer: uuid::Uuid =
+            sqlx::query_scalar("SELECT id FROM users WHERE display_name = 'Surface Owner'")
+                .fetch_one(db.pool())
+                .await
+                .expect("buyer reads");
+        let demand = publish_demand(&app, &buyer_cookie).await;
+        let offer = submit_offer(&app, &demand, &seller_cookie).await;
+        let demand_id: uuid::Uuid = demand.parse().expect("id parses");
+        let offer_id: uuid::Uuid = offer.parse().expect("id parses");
+
+        // A real handoff builds its transient URL; nothing persistent may
+        // carry the address, the digits, or the message.
+        let handoff = start_contact(
+            db.pool(),
+            &keys(),
+            buyer,
+            demand_id,
+            offer_id,
+            ContactInput {
+                handoff_id: Some(uuid::Uuid::now_v7().to_string()),
+                expected_offer_terms: Some(1),
+                entry_source: Some("offer_detail".to_owned()),
+            },
+        )
+        .await
+        .expect("handoff starts");
+        let url = whatsapp_url(&handoff.destination, "Hi!");
+        assert!(url.starts_with("https://wa.me/"));
+        let payloads: Vec<String> = sqlx::query_scalar(
+            "SELECT payload::text FROM business_events WHERE resource_kind IN ('offer', 'contact')",
+        )
+        .fetch_all(db.pool())
+        .await
+        .expect("payloads read");
+        assert!(!payloads.is_empty());
+        for payload in &payloads {
+            assert!(!payload.contains("wa.me"), "no handoff URL persists");
+            assert!(!payload.contains("551190000246"), "no digits persist");
+        }
+        let bodies: Vec<String> = sqlx::query_scalar("SELECT body FROM notices")
+            .fetch_all(db.pool())
+            .await
+            .expect("notices read");
+        for body in &bodies {
+            assert!(!body.contains("wa.me"));
+            assert!(!body.contains("551190000246"));
+        }
+        // Error shapes and cache semantics stay clean: refusal bodies name
+        // no destination material, and handoff responses are no-store
+        // (asserted here as the contract the routes must send).
+        let ghost = uuid::Uuid::now_v7();
+        let (status, body) = call(
+            app.clone(),
+            "POST",
+            &format!("/api/v1/requests/{demand}/offers/{ghost}/contact"),
+            Some(contact_body(&uuid::Uuid::now_v7().to_string(), 1)),
+            Some(&buyer_cookie),
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_no_destination(&body);
+        assert_eq!(CACHE_DIRECTIVE, "no-store");
+        db.cleanup().await.expect("suite cleans up");
+    }
+}
