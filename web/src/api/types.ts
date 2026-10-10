@@ -14,6 +14,9 @@ export const ERROR_CODES = [
   "conflict_revision",
   "idempotency_key_reuse",
   "rate_limited",
+  "verification_failed",
+  "expired",
+  "duplicate_intent",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
