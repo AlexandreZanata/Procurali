@@ -331,6 +331,25 @@ paths:
       responses:
         '200': { description: Appeal queue page }
         '403': { description: forbidden_role }
+  /metrics/operational:
+    get:
+      tags: [staff]
+      summary: Staff operational aggregates (granted moderator-or-better, audited purpose)
+      description: >
+        Non-sensitive counts and ratios only (incidents, sharing,
+        free-professional activity, effective policy version). Reporter
+        identities, phones, destinations, tokens, and secrets never appear.
+        Requires `purpose` query for the audit fact.
+      parameters:
+        - name: purpose
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '200': { description: Operational aggregates with effective policy version }
+        '400': { description: missing_field/invalid_field (purpose required) }
+        '401': { description: unauthenticated }
+        '403': { description: forbidden_role }
 components:
   securitySchemes:
     cookieAuth:
