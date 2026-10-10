@@ -55,6 +55,8 @@ pub mod application {
     pub mod feedback;
     /// Durable per-action deduplication (same key/body replays, changed body conflicts).
     pub mod idempotency;
+    /// Operational liquidity classification: history separate from live supply.
+    pub mod liquidity;
     /// Mature cohort denominators and primary metrics: exact ratios only.
     pub mod metrics;
     /// Prioritized case review and dispositions: human decisions.
