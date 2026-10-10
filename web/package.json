@@ -1,0 +1,17 @@
+{
+  "name": "procurali-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Procurali free-MVP minimal native web UI: plain TypeScript, semantic HTML, no runtime framework.",
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/build.mjs --self-test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "typescript": "7.0.2"
+  }
+}
