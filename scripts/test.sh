@@ -1,20 +1,46 @@
 #!/usr/bin/env bash
 # Fail-loud test tier dispatcher. See docs/engineering/testing.md.
 # Usage: scripts/test.sh <tier> [--task TASK-ID]
-#   tiers: unit | api | privacy | all
-#   Tiers without a registered suite (integration, concurrency, web, e2e, ops,
+#   tiers: unit | api | privacy | web | e2e | all
+#   Tiers without a registered suite (integration, concurrency, ops,
 #   critical-mutations, load) exit nonzero instead of silently passing.
+#   The e2e tier requires PROCURALI_E2E_BASE_URL plus TEST_DATABASE_URL and
+#   fails loudly without them or with zero registered e2e cases.
 #   --task restricts to the named task's registered targets; unknown tasks or
 #   zero matches exit nonzero.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND="$REPO_ROOT/backend"
+WEB="$REPO_ROOT/web"
 BIN_NAME="procurali-backend"
+
+# Web component tier: pinned clean install, typecheck, build, browser specs.
+# Any missing tool, type error, build failure, or spec failure is failure.
+run_web_tier() {
+  cd "$WEB"
+  echo "test.sh: web: npm ci (pinned lockfile)"
+  npm ci --no-audit --no-fund
+  echo "test.sh: web: npm run check (tsc --noEmit)"
+  npm run check
+  echo "test.sh: web: npm run build"
+  npm run build
+  echo "test.sh: web: playwright component project"
+  npx playwright test --project=component
+}
+
+# Full-journey tier: real disposable backend/database through the harness.
+# Missing env, unreachable backend, or zero e2e cases fails loudly.
+run_e2e_tier() {
+  cd "$WEB"
+  echo "test.sh: e2e: playwright e2e project (real disposable stack)"
+  npx playwright test --project=e2e
+}
+
 cd "$BACKEND"
 
 usage() {
-  echo "usage: scripts/test.sh <unit|api|privacy|all> [--task TASK-ID]" >&2
+  echo "usage: scripts/test.sh <unit|api|privacy|web|e2e|all> [--task TASK-ID]" >&2
   exit 2
 }
 
@@ -24,6 +50,8 @@ tier_targets() {
     unit) printf '%s\n' "bin" "configuration" "privacy_logging" "api_scaffold" ;;
     api) printf '%s\n' "api_scaffold" ;;
     privacy) printf '%s\n' "privacy_logging" ;;
+    web) printf '%s\n' "web-component" ;;
+    e2e) printf '%s\n' "e2e-suite" ;;
     *) return 1 ;;
   esac
 }
@@ -67,7 +95,26 @@ if [ "$TIER" = "all" ]; then
       TARGETS+=("$tier:$target")
     done < <(tier_targets "$tier")
   done
-  echo "test.sh: pending tiers without registered suites: integration concurrency web e2e ops critical-mutations load"
+  echo "test.sh: pending tiers without registered suites: integration concurrency ops critical-mutations load"
+  echo "test.sh: tier 'web' runs separately (node toolchain); tier 'e2e' needs a live disposable stack"
+  echo "test.sh: running cargo tiers for 'all'; invoking web tier next"
+  run_web_tier
+elif [ "$TIER" = "web" ]; then
+  if [ -n "$TASK" ]; then
+    echo "test.sh: --task filtering is not supported for tier 'web' yet (failing loudly)" >&2
+    exit 2
+  fi
+  run_web_tier
+  echo "test.sh: web tier passed"
+  exit 0
+elif [ "$TIER" = "e2e" ]; then
+  if [ -n "$TASK" ]; then
+    echo "test.sh: --task filtering is not supported for tier 'e2e' yet (failing loudly)" >&2
+    exit 2
+  fi
+  run_e2e_tier
+  echo "test.sh: e2e tier passed"
+  exit 0
 elif tier_targets "$TIER" >/dev/null; then
   if [ -n "$TASK" ]; then
     if ! task_targets "$TASK" >/dev/null; then
@@ -90,7 +137,7 @@ elif tier_targets "$TIER" >/dev/null; then
   fi
 else
   case "$TIER" in
-    integration | concurrency | web | e2e | ops | critical-mutations | load)
+    integration | concurrency | ops | critical-mutations | load)
       echo "test.sh: no suite registered for tier '$TIER' yet (failing loudly)" >&2
       exit 3
       ;;

@@ -185,6 +185,8 @@ pub mod persistence {
 pub mod http {
     /// Registration, challenge, and confirmation routes (pending to active).
     pub mod accounts;
+    /// Static asset routes: built UI with safe cache headers.
+    pub mod assets;
     /// Session routes: login, current account, and logout with CSRF contract.
     pub mod auth;
     /// Block routes: own restrictions, nothing disclosed.
