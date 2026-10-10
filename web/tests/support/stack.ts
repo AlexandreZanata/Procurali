@@ -52,7 +52,9 @@ export function requireDisposableDb(): void {
 async function postJson(base: string, path: string, body: unknown): Promise<{ status: number; json: unknown; cookies: string }> {
   const response = await fetch(`${base}${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    // Same-host origin contract: node fetch sends no Origin by itself,
+    // while browsers always do; unsafe methods name their own host.
+    headers: { "content-type": "application/json", origin: base },
     body: JSON.stringify(body),
   });
   const text = await response.text();
