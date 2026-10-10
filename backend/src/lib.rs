@@ -57,6 +57,8 @@ pub mod application {
     pub mod idempotency;
     /// Operational liquidity classification: history separate from live supply.
     pub mod liquidity;
+    /// Accountable metric corrections without rewriting history.
+    pub mod metric_corrections;
     /// Mature cohort denominators and primary metrics: exact ratios only.
     pub mod metrics;
     /// Prioritized case review and dispositions: human decisions.
@@ -197,6 +199,8 @@ pub mod http {
     pub mod errors;
     /// Liveness/readiness probes over dependency flags (no values in output).
     pub mod health;
+    /// Staff metrics routes: aggregates for granted roles only.
+    pub mod metrics;
     /// Moderation routes: staff queues, review, and dispositions.
     pub mod moderation;
     /// Notice routes: owner-only lists and acknowledgments.
