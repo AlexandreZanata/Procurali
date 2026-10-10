@@ -65,6 +65,8 @@ pub mod application {
     pub mod offer_limits;
     /// Private offer comparison reads: buyer sets and seller self-views.
     pub mod offer_reads;
+    /// Retention, sharing and operational indicators without paid invention.
+    pub mod operational_metrics;
     /// Pair interaction guard: live eligibility plus active blocks.
     pub mod pair_eligibility;
     /// Phone-verification provider boundary with a restricted deterministic fake.

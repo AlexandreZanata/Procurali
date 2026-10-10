@@ -1,16 +1,20 @@
-//! Cohort-metric acceptance (P14-T03): exact ratios, honest unknowns.
+//! Cohort-metric acceptance (P14-T03) plus retention/sharing/operational
+//! indicators (P14-T04): exact ratios, honest unknowns, no paid invention.
 //!
 //! Requires an explicit disposable `TEST_DATABASE_URL` (fails loudly
 //! otherwise). There is no metrics HTTP surface yet, so these tests drive
 //! the application operations directly over real PostgreSQL — the same
 //! direct-proof pattern as the staff-grant cards ("api" here is the
-//! audited Rust operation surface). Proves:
-//! - one demand with two distinct seller contacts measures North Star 2
-//!   with 100% coverage and no inferred sale;
-//! - elsewhere and unknown-source resolutions stay separate from
-//!   platform-attributed outcomes;
-//! - empty and immature cohorts report not-applicable instead of a false
-//!   zero success rate.
+//! audited Rust operation surface).
+//!
+//! P14-T03 proves one demand with two distinct seller contacts measures
+//! North Star 2 with full coverage and no inferred sale, elsewhere and
+//! unknown-source resolutions stay separate, and empty cohorts report
+//! not-applicable.
+//!
+//! P14-T04 proves repeat and unknown visitor data never inflates unique
+//! acquisition, professional declaration never implies paid custom, and
+//! reviewed incident rate differs from raw volume with delay.
 //!
 //! All names, numbers, codes, and keys below are synthetic and reserved.
 
@@ -18,12 +22,22 @@
 mod database;
 
 use database::TestDatabase;
+use procurali_backend::application::create_report::ReportInput;
 use procurali_backend::application::metrics::{compute_cohort, CohortScope, Maturity};
+use procurali_backend::application::operational_metrics::{
+    allowance_friction, compute_retention, incident_metrics, is_paid_customer, paid_indicator,
+    professional_activity, radar_adoption, sharing_counts, summarize_acquisition,
+    PROFESSIONAL_ACTIVITY_DAYS,
+};
+use procurali_backend::application::professional_profile::{declare_profile, NewProfessional};
 use procurali_backend::application::publish_request::publish_request;
 use procurali_backend::application::record_outcome::{
     record_outcome, CompletionSource, OutcomeAnswer,
 };
+use procurali_backend::application::report_updates::submit_grouped_report;
 use procurali_backend::application::request_drafts::{create_draft, DraftInput};
+use procurali_backend::application::share_attribution::{attribute_registration, record_landing};
+use procurali_backend::application::share_request::prepare_share;
 use procurali_backend::application::start_contact::{start_contact, ContactInput};
 use procurali_backend::application::submit_offer::{submit_offer, OfferInput};
 use procurali_backend::application::view_offer::view_offer;
@@ -328,5 +342,255 @@ async fn empty_and_immature_are_not_false_zero() {
     assert_eq!(fresh.unknown_outcomes, 1);
     assert_eq!(fresh.respondent_success.value, None);
     let _ = seller;
+    db.cleanup().await.expect("suite cleans up");
+}
+
+// P14-T04: repeat and unknown visitor data never inflates unique acquisition.
+//
+// Seeds one shareable demand, one recorded share intent, two identifiable
+// landings plus one direct visit, and one attributable registration. The
+// pure summarizer deduplicates a reused marker while the durable counts
+// keep anonymous visits separate. Retention over two staged 30-day windows
+// proves the same buyer/seller returning without draft-only inflation.
+#[tokio::test]
+async fn repeat_and_unknown_visits_do_not_inflate_acquisition() {
+    let db = TestDatabase::create("p14t04_acquisition")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p14t04_acquisition_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let buyer = seed_active(db.pool(), "Share Buyer", "+55 11 90000-2910").await;
+    let seller = seed_active(db.pool(), "Share Seller", "+55 11 90000-2911").await;
+    let demand = publish_demand(db.pool(), buyer, "Shared Refrigerator").await;
+    prepare_share(db.pool(), Some(buyer), demand, "copy")
+        .await
+        .expect("share intent records");
+
+    // Two identifiable landings plus one direct visit; the first marker is
+    // reused once to model a repeat view of the same link.
+    let first = record_landing(
+        db.pool(),
+        Some(demand),
+        Some(chrono::Utc::now() - chrono::Duration::hours(2)),
+    )
+    .await
+    .expect("first landing records");
+    let second = record_landing(
+        db.pool(),
+        Some(demand),
+        Some(chrono::Utc::now() - chrono::Duration::hours(1)),
+    )
+    .await
+    .expect("second landing records");
+    let _direct = record_landing(db.pool(), None, None)
+        .await
+        .expect("direct visit records");
+
+    // A registration after the first landing attributes; a missing marker
+    // and the direct visit stay unknown by construction.
+    let newcomer = seed_active(db.pool(), "Share Newcomer", "+55 11 90000-2912").await;
+    let attributed = attribute_registration(db.pool(), newcomer, Some(first.id))
+        .await
+        .expect("attribution reads");
+    assert!(
+        matches!(
+            attributed,
+            procurali_backend::application::share_attribution::Attribution::Attributed { .. }
+        ),
+        "fresh identifiable marker attributes"
+    );
+    let unknown = attribute_registration(db.pool(), newcomer, None)
+        .await
+        .expect("missing marker reads unknown");
+    assert_eq!(
+        unknown,
+        procurali_backend::application::share_attribution::Attribution::Unknown
+    );
+
+    let counts = sharing_counts(db.pool())
+        .await
+        .expect("sharing counts read");
+    assert_eq!(counts.share_intents, 1);
+    assert_eq!(counts.total_landings, 3);
+    assert_eq!(counts.identifiable_landings, 2);
+    assert_eq!(counts.direct_visits, 1);
+
+    // Repeat marker reuse deduplicates: three observations collapse to two
+    // attributable visitors, with the direct visit kept out of the ratio.
+    let summary = summarize_acquisition(
+        &[first.id, first.id, second.id],
+        &[first.id],
+        counts.direct_visits,
+    );
+    assert_eq!(summary.attributable_visitors, 2);
+    assert_eq!(summary.attributed_registrations, 1);
+    assert_eq!(summary.anonymous_visits, 1);
+    assert_eq!(summary.conversion.value, Some(0.5));
+
+    // Retention fixture staging (clock backdating disclosed): the same
+    // buyer publishes in both windows and the same seller supplies in both
+    // windows, so both recur exactly once. The retention instant is taken
+    // after all writes with a small future buffer so current-window rows
+    // (half-open end) are inside the window.
+    let staging_now = chrono::Utc::now();
+    let previous_demand = publish_demand(db.pool(), buyer, "Previous Fridge").await;
+    sqlx::query("UPDATE requests SET original_published_at = $1 WHERE id = $2")
+        .bind(staging_now - chrono::Duration::days(40))
+        .bind(previous_demand)
+        .execute(db.pool())
+        .await
+        .expect("previous publication stages");
+    let previous_offer = contacted_offer(db.pool(), buyer, seller, previous_demand, "500.00").await;
+    sqlx::query("UPDATE offers SET created_at = $1 WHERE id = $2")
+        .bind(staging_now - chrono::Duration::days(40))
+        .bind(previous_offer)
+        .execute(db.pool())
+        .await
+        .expect("previous supply stages");
+    let _current_offer = contacted_offer(db.pool(), buyer, seller, demand, "520.00").await;
+    let retention_now = chrono::Utc::now() + chrono::Duration::seconds(10);
+    let retention = compute_retention(db.pool(), retention_now)
+        .await
+        .expect("retention computes");
+    assert!(retention.previous_buyers >= 1);
+    assert!(retention.recurring_buyers >= 1);
+    assert!(retention.previous_sellers >= 1);
+    assert!(retention.recurring_sellers >= 1);
+    assert_eq!(
+        retention.recurring_buyer_rate.value,
+        Some(retention.recurring_buyers as f64 / retention.previous_buyers as f64)
+    );
+    let rendered = serde_json::to_string(&summary).expect("acquisition serializes");
+    assert!(!rendered.contains("phone"));
+    db.cleanup().await.expect("suite cleans up");
+}
+
+// P14-T04: professional declaration and free activity never imply paid use.
+//
+// Declares a free professional, records a real eligible offer, and proves
+// the activity counts as free while paid and Radar indicators stay
+// explicitly deferred (unavailable, never zero customers invented).
+#[tokio::test]
+async fn free_professional_activity_does_not_imply_paid_customer() {
+    let db = TestDatabase::create("p14t04_professional")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p14t04_professional_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let buyer = seed_active(db.pool(), "Pro Buyer", "+55 11 90000-2920").await;
+    let seller = seed_active(db.pool(), "Pro Seller", "+55 11 90000-2921").await;
+    declare_profile(
+        db.pool(),
+        seller,
+        NewProfessional {
+            business_name: "Corner Shop".to_owned(),
+            business_type: "shop".to_owned(),
+            city: "Campinas".to_owned(),
+            region: "SP".to_owned(),
+        },
+    )
+    .await
+    .expect("professional declares");
+    let demand = publish_demand(db.pool(), buyer, "Professional Fridge").await;
+    contacted_offer(db.pool(), buyer, seller, demand, "510.00").await;
+
+    let since = chrono::Utc::now() - chrono::Duration::days(PROFESSIONAL_ACTIVITY_DAYS);
+    let activity = professional_activity(db.pool(), since)
+        .await
+        .expect("professional activity reads");
+    assert_eq!(activity.declared, 1);
+    assert_eq!(activity.free_active, 1);
+    assert!(!activity.paid.available);
+    assert!(!is_paid_customer(false));
+    assert!(is_paid_customer(true));
+    assert!(!paid_indicator().available);
+    assert!(!radar_adoption().available);
+
+    // Allowance friction assembles from observed counts without consuming
+    // any successful-action quota by itself.
+    let friction = allowance_friction(4, 3, 1).expect("friction assembles");
+    assert_eq!(friction.eventual_success.value, Some(0.75));
+    let rendered = serde_json::to_string(&activity).expect("activity serializes");
+    for absent in ["phone", "lookup", "cipher", "token", "reporter", "secret"] {
+        assert!(!rendered.contains(absent), "no {absent} in activity");
+    }
+    db.cleanup().await.expect("suite cleans up");
+}
+
+// P14-T04: reviewed incident rate differs from raw report volume.
+//
+// Files three grouped allegations about one contacted offer (duplicates
+// group into the standing case), reviews exactly one case valid with a
+// staged 26-hour decision delay, and proves the valid-incident rate uses
+// reviewed validity while the raw rate keeps every allegation.
+#[tokio::test]
+async fn reviewed_incident_rate_differs_from_raw_volume() {
+    let db = TestDatabase::create("p14t04_incidents")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p14t04_incidents_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let buyer = seed_active(db.pool(), "Incident Buyer", "+55 11 90000-2930").await;
+    let seller = seed_active(db.pool(), "Incident Seller", "+55 11 90000-2931").await;
+    let demand = publish_demand(db.pool(), buyer, "Incident Fridge").await;
+    let offer = contacted_offer(db.pool(), buyer, seller, demand, "500.00").await;
+    let target = ReportInput {
+        target_kind: "offer".to_owned(),
+        target_id: offer,
+        reason: "spam".to_owned(),
+        detail: "repeated allegation".to_owned(),
+    };
+    let first = submit_grouped_report(db.pool(), buyer, target.clone())
+        .await
+        .expect("first allegation files");
+    // Two refilings group into the standing incident; the same reporter's
+    // repeats land as duplicate information without extra weight.
+    for _ in 0..2 {
+        submit_grouped_report(db.pool(), buyer, target.clone())
+            .await
+            .expect("grouped refiling files");
+    }
+    // Review staging disclosed: exactly one standing case becomes valid
+    // 26 hours after intake; duplicates never become separate validity.
+    sqlx::query(
+        "UPDATE report_cases SET status = 'valid',
+         updated_at = created_at + interval '26 hours' WHERE id = $1",
+    )
+    .bind(first.case_id)
+    .execute(db.pool())
+    .await
+    .expect("valid review stages");
+
+    let metrics = incident_metrics(db.pool())
+        .await
+        .expect("incident metrics read");
+    assert_eq!(metrics.raw_reports, 3);
+    assert_eq!(metrics.valid_incidents, 1);
+    assert!(metrics.eligible_interactions >= 1);
+    assert_ne!(metrics.valid_incident_rate, metrics.raw_report_rate);
+    assert_eq!(
+        metrics.valid_incident_rate.value,
+        Some(metrics.valid_incidents as f64 / metrics.eligible_interactions as f64)
+    );
+    let delay = metrics
+        .median_review_delay_hours
+        .expect("review delay discloses");
+    assert!(
+        (delay - 26.0).abs() < 0.1,
+        "median delay discloses staged 26h, got {delay}"
+    );
+    let rendered = serde_json::to_string(&metrics).expect("incidents serialize");
+    for absent in ["phone", "reporter", "destination", "token", "secret"] {
+        assert!(!rendered.contains(absent), "no {absent} in incidents");
+    }
     db.cleanup().await.expect("suite cleans up");
 }
