@@ -4,7 +4,7 @@
     "actual-host deployment smoke (P18)",
     "off-host backup restore (P18)"
   ],
-  "note": "Planned registry only. status planned means not yet implemented or run; no test is claimed passing. Tiers derive from the task manifest. Live-provider/host/backup gates are recorded separately and never satisfied by local fakes.",
+  "note": "Reconciled 2026-10-11 (P17-T01): every scenario names its real discovered assertions \u2014 backend target::test, lib:module::test, or web:spec#title. Future entries name only the standing guard test. No test is claimed passing here; tiers re-run them. Live-provider/host/backup gates stay recorded separately and are never satisfied by fakes.",
   "races": [
     {
       "id": "race-registration-phone",
@@ -14,7 +14,12 @@
         "P04-T07"
       ],
       "scenario": "Two initial registrations/phone changes contend for one canonical phone.",
-      "status": "planned"
+      "status": "implemented",
+      "tests": [
+        "api_accounts::concurrent_registrations_create_no_duplicate_phone_accounts",
+        "postgres_users::formatting_variants_contend_for_one_current_phone_identity",
+        "concurrency_contacts::phone_change_retry_keeps_single_history"
+      ]
     },
     {
       "id": "race-publication-slot",
@@ -22,7 +27,10 @@
         "P05-T05"
       ],
       "scenario": "Two publications contend for the last open slot or activation allowance.",
-      "status": "planned"
+      "status": "implemented",
+      "tests": [
+        "postgres_request_limits::final_slot_contenders_cannot_overpublish"
+      ]
     },
     {
       "id": "race-duplicate-intent",
@@ -30,7 +38,10 @@
         "P05-T06"
       ],
       "scenario": "Two identical intents published concurrently by one owner.",
-      "status": "planned"
+      "status": "implemented",
+      "tests": [
+        "postgres_request_duplicates::concurrent_identical_publications_produce_one_active_intent"
+      ]
     },
     {
       "id": "race-offer-slot",
@@ -38,7 +49,11 @@
         "P07-T03"
       ],
       "scenario": "Two offer submissions contend for one seller/cycle slot or daily allowance.",
-      "status": "planned"
+      "status": "implemented",
+      "tests": [
+        "postgres_offers::concurrent_same_seller_cycle_has_one_slot",
+        "postgres_offer_limits::concurrent_final_quota_contenders_cannot_exceed"
+      ]
     },
     {
       "id": "race-revision-vs-offer",
@@ -46,7 +61,10 @@
         "P07-T08"
       ],
       "scenario": "Budget/category/material revision races with offer submission and resubmission.",
-      "status": "planned"
+      "status": "implemented",
+      "tests": [
+        "postgres_offer_cascades::material_edit_and_resubmission_match_latest_requirements"
+      ]
     },
     {
       "id": "race-withdrawal-vs-contact",
@@ -54,7 +72,10 @@
         "P08-T06"
       ],
       "scenario": "Offer withdrawal or revision races with contact initiation.",
-      "status": "planned"
+      "status": "implemented",
+      "tests": [
+        "concurrency_contacts::open_withdrawal_contact_race_converges"
+      ]
     },
     {
       "id": "race-closure-vs-interaction",
@@ -62,7 +83,11 @@
         "P09-T04"
       ],
       "scenario": "Buyer closure/expiry/renewal races with offer or contact.",
-      "status": "planned"
+      "status": "implemented",
+      "tests": [
+        "postgres_offer_cascades::closure_submission_race_leaves_no_live_offer",
+        "concurrency_outcomes::submission_against_closure_leaves_no_live_offer"
+      ]
     },
     {
       "id": "race-restriction-vs-contact",
@@ -72,7 +97,12 @@
         "P11-T06"
       ],
       "scenario": "Account suspension/ban/deletion and category prohibition race with contact.",
-      "status": "planned"
+      "status": "implemented",
+      "tests": [
+        "concurrency_contacts::block_winning_contact_race_yields_no_destination",
+        "api_moderation_accounts::ban_winning_contact_race_refuses_history_remains",
+        "api_policy_changes::prohibition_winning_contact_race_reveals_nothing"
+      ]
     },
     {
       "id": "race-block-vs-contact",
@@ -81,7 +111,11 @@
         "P10-T06"
       ],
       "scenario": "Blocking races with contact; unblocking never resurrects old offers.",
-      "status": "planned"
+      "status": "implemented",
+      "tests": [
+        "concurrency_contacts::block_winning_contact_race_yields_no_destination",
+        "concurrency_contacts::restriction_first_disables_handoff"
+      ]
     },
     {
       "id": "race-idempotent-replay",
@@ -90,7 +124,12 @@
         "P09-T01"
       ],
       "scenario": "Duplicate contact/outcome actions use the same idempotency identity concurrently.",
-      "status": "planned"
+      "status": "implemented",
+      "tests": [
+        "postgres_idempotency::concurrent_duplicate_actions_create_one_fact",
+        "postgres_contacts::identical_action_identities_create_one_unique_contact",
+        "concurrency_outcomes::duplicate_final_answers_converge_on_one_outcome"
+      ]
     },
     {
       "id": "race-contact-allowance",
@@ -98,7 +137,10 @@
         "P08-T05"
       ],
       "scenario": "Several distinct seller contacts contend for the final contact allowance.",
-      "status": "planned"
+      "status": "implemented",
+      "tests": [
+        "postgres_contact_limits::final_distinct_slot_contenders_yield_one_winner"
+      ]
     },
     {
       "id": "race-worker-claim",
@@ -107,7 +149,12 @@
         "P09-T02"
       ],
       "scenario": "Two workers claim the same expiry/prompt/retention job; one crashes after claim.",
-      "status": "planned"
+      "status": "implemented",
+      "tests": [
+        "postgres_jobs::two_workers_do_not_complete_the_same_claim_twice",
+        "postgres_expiry::worker_runs_converge_on_one_notice_and_event",
+        "postgres_retention::workers_and_retry_converge"
+      ]
     },
     {
       "id": "race-retry-vs-provider",
@@ -116,7 +163,11 @@
         "P03-T07"
       ],
       "scenario": "A retryable transaction failure cannot repeat an external provider request or duplicate a business event.",
-      "status": "planned"
+      "status": "implemented",
+      "tests": [
+        "postgres_transactions::provider_records_zero_duplicate_sends_during_retry",
+        "postgres_transactions::injected_serialization_retry_yields_one_mutation_and_event"
+      ]
     },
     {
       "id": "race-phone-change-vs-retry",
@@ -125,7 +176,11 @@
         "P08-T04"
       ],
       "scenario": "A phone change occurs before an old contact request is retried; current destination authoritative, history unchanged.",
-      "status": "planned"
+      "status": "implemented",
+      "tests": [
+        "concurrency_contacts::phone_change_retry_keeps_single_history",
+        "api_identity_history::new_handoff_uses_new_destination_prior_terms_intact"
+      ]
     }
   ],
   "registration": {
@@ -274,7 +329,7 @@
         "P17-T01",
         "P19-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
@@ -283,6 +338,11 @@
         "e2e",
         "unit",
         "concurrency"
+      ],
+      "tests": [
+        "api_public_requests::anonymous_understands_active_demand",
+        "api_public_html::html_identifies_item_budget_region",
+        "web:tests/e2e/discovery.spec.ts#anonymous active request is understandable before signup"
       ]
     },
     "AC-02": {
@@ -294,7 +354,7 @@
         "P16-T02",
         "P18-T07"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "api",
@@ -304,6 +364,10 @@
         "web",
         "e2e",
         "ops"
+      ],
+      "tests": [
+        "api_accounts::minimal_valid_payload_registers_without_extra_documents",
+        "api_accounts::challenge_and_confirmation_round_trip"
       ]
     },
     "AC-03": {
@@ -318,7 +382,7 @@
         "P12-T05",
         "P16-T02"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "concurrency",
@@ -327,6 +391,12 @@
         "api",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_identity_history::duplicate_phone_and_stranger_history_refuse",
+        "postgres_users::non_deleted_duplicate_rejected_by_app_and_database",
+        "api_phone_change::competing_accounts_produce_one_permitted_assignment",
+        "web:tests/e2e/auth.spec.ts#profile move keeps request locality and phone conflicts refuse safely"
       ]
     },
     "AC-04": {
@@ -336,7 +406,7 @@
         "P16-T03",
         "P19-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -345,6 +415,10 @@
         "e2e",
         "concurrency",
         "privacy"
+      ],
+      "tests": [
+        "api_requests::valid_minimal_request_becomes_active_with_seven_day_deadline",
+        "web:tests/e2e/requests.spec.ts#valid publication persists and offers sharing"
       ]
     },
     "AC-05": {
@@ -358,7 +432,7 @@
         "P05-T04",
         "P16-T03"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "api",
@@ -366,6 +440,10 @@
         "integration",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_requests::each_invalid_requirement_is_refused_without_event",
+        "web:tests/e2e/requests.spec.ts#refused writes show errors without false success"
       ]
     },
     "AC-06": {
@@ -374,7 +452,7 @@
         "P05-T05",
         "P16-T03"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -382,7 +460,13 @@
         "concurrency",
         "web",
         "e2e"
-      ]
+      ],
+      "tests": [
+        "postgres_request_limits::fourth_open_request_is_refused_while_ended_rows_free_slots",
+        "postgres_request_limits::seventh_in_window_activation_is_refused",
+        "lib:application::request_limits::tests::quotas_match_the_policy_defaults"
+      ],
+      "note": "Library-level refusal proven; HTTP publish-time quota wiring is a recorded follow-up."
     },
     "AC-07": {
       "disposition": "mandatory",
@@ -391,7 +475,7 @@
         "P05-T06",
         "P16-T03"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -399,7 +483,13 @@
         "concurrency",
         "web",
         "e2e"
-      ]
+      ],
+      "tests": [
+        "postgres_request_duplicates::exact_normalized_duplicate_is_refused_with_its_existing_need",
+        "postgres_request_duplicates::concurrent_identical_publications_produce_one_active_intent",
+        "lib:application::duplicate_intent::tests::identity_needs_every_field"
+      ],
+      "note": "Library-level refusal proven; HTTP publish-time duplicate wiring is a recorded follow-up."
     },
     "AC-08": {
       "disposition": "mandatory",
@@ -407,13 +497,16 @@
         "P06-T01",
         "P16-T03"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "request_revision::spelling_only_edit_preserves_compatibility"
       ]
     },
     "AC-09": {
@@ -423,7 +516,7 @@
         "P07-T08",
         "P16-T03"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -431,6 +524,10 @@
         "concurrency",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "request_revision::budget_up_and_down_are_material_within_three_a_day",
+        "postgres_offer_cascades::material_edit_and_resubmission_match_latest_requirements"
       ]
     },
     "AC-10": {
@@ -445,7 +542,7 @@
         "P16-T08",
         "P17-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -456,6 +553,11 @@
         "web",
         "e2e",
         "critical-mutations"
+      ],
+      "tests": [
+        "deadline_requests::eligibility_denies_the_exact_deadline_despite_recorded_state",
+        "api_requests::elapsed_active_row_has_no_offer_or_contact_action",
+        "api_lifecycle_journeys::expired_journey_reconciles_end_to_end"
       ]
     },
     "AC-11": {
@@ -465,7 +567,7 @@
         "P07-T08",
         "P16-T03"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -473,6 +575,10 @@
         "concurrency",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_request_renewal::valid_renewal_increments_cycle_and_activation_once",
+        "deadline_vectors::renewal_keeps_original_publication_age"
       ]
     },
     "AC-12": {
@@ -483,7 +589,7 @@
         "P09-T02",
         "P16-T03"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "concurrency",
@@ -492,6 +598,10 @@
         "api",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "postgres_outcome_prompts::not_yet_keeps_deadline_and_expired_stays_inactive",
+        "api_request_renewal::early_renewal_and_unconfirmed_paths_produce_no_cycle"
       ]
     },
     "AC-13": {
@@ -503,7 +613,7 @@
         "P13-T06",
         "P16-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -512,6 +622,11 @@
         "concurrency",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "postgres_discovery::empty_inverted_and_unavailable_match_contract",
+        "postgres_discovery::renewal_edit_never_outrank_newer_demand",
+        "concurrency_discovery::recency_and_renewal_stay_correct_after_changes"
       ]
     },
     "AC-14": {
@@ -521,7 +636,7 @@
         "P16-T04",
         "P19-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -530,6 +645,10 @@
         "web",
         "e2e",
         "concurrency"
+      ],
+      "tests": [
+        "api_offers::valid_used_offer_matches_used_demand",
+        "api_offers::buyer_phone_is_absent_from_seller_submission_response"
       ]
     },
     "AC-15": {
@@ -538,7 +657,7 @@
         "P07-T02",
         "P16-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -546,6 +665,9 @@
         "privacy",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "postgres_offers::no_orphan_offer_or_negative_price_is_persisted"
       ]
     },
     "AC-16": {
@@ -556,7 +678,7 @@
         "P16-T04",
         "P17-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -565,6 +687,11 @@
         "web",
         "e2e",
         "critical-mutations"
+      ],
+      "tests": [
+        "api_offers::incompatible_submissions_refuse_without_new_offer",
+        "domain_vectors::budget_compatibility_follows_inv19_ac16",
+        "domain_vectors::condition_acceptance_follows_inv20"
       ]
     },
     "AC-17": {
@@ -574,7 +701,7 @@
         "P07-T05",
         "P16-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -583,6 +710,11 @@
         "privacy",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "postgres_offer_limits::withdrawn_and_rejected_slots_stay_taken",
+        "postgres_offer_limits::concurrent_final_quota_contenders_cannot_exceed",
+        "web:tests/e2e/offers.spec.ts#withdrawn and retried slots refuse while history stands"
       ]
     },
     "AC-18": {
@@ -591,7 +723,7 @@
         "P07-T05",
         "P16-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
@@ -599,6 +731,9 @@
         "privacy",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_offer_actions::repeated_details_create_one_first_view_conversion"
       ]
     },
     "AC-19": {
@@ -611,7 +746,7 @@
         "P16-T04",
         "P19-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "api",
@@ -620,6 +755,11 @@
         "web",
         "e2e",
         "concurrency"
+      ],
+      "tests": [
+        "api_offer_reads::sellers_only_see_their_own_offers",
+        "api_offer_reads::unrelated_buyers_and_anonymous_read_nothing_private",
+        "web:tests/e2e/offers.spec.ts#two sellers cannot read each other private terms"
       ]
     },
     "AC-20": {
@@ -630,7 +770,7 @@
         "P16-T04",
         "P16-T05"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -639,6 +779,11 @@
         "privacy",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_offer_edits::price_update_fits_budget_or_is_refused",
+        "api_offer_edits::viewed_state_and_snapshot_survive_edits",
+        "api_offer_edits::stale_expected_revision_refuses_edit_and_contact"
       ]
     },
     "AC-21": {
@@ -650,7 +795,7 @@
         "P18-T07",
         "P19-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -660,6 +805,11 @@
         "e2e",
         "ops",
         "concurrency"
+      ],
+      "tests": [
+        "api_contacts::valid_buyer_contact_succeeds_while_others_refuse",
+        "api_contacts::preparation::contextual_message_carries_current_terms",
+        "web:tests/e2e/contact-outcome.spec.ts#valid contact uses the current seller URL and records one initiation"
       ]
     },
     "AC-22": {
@@ -671,7 +821,7 @@
         "P16-T05",
         "P17-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -680,6 +830,9 @@
         "web",
         "e2e",
         "critical-mutations"
+      ],
+      "tests": [
+        "api_contacts::valid_buyer_contact_succeeds_while_others_refuse"
       ]
     },
     "AC-23": {
@@ -690,7 +843,7 @@
         "P16-T05",
         "P17-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
@@ -699,6 +852,11 @@
         "web",
         "e2e",
         "critical-mutations"
+      ],
+      "tests": [
+        "postgres_contacts::same_retry_records_one_unique_contact",
+        "postgres_contacts::later_valid_handoff_records_repeat_without_inflation",
+        "web:tests/e2e/contact-outcome.spec.ts#valid contact uses the current seller URL and records one initiation"
       ]
     },
     "AC-24": {
@@ -708,7 +866,7 @@
         "P16-T05",
         "P18-T05"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -718,6 +876,9 @@
         "e2e",
         "concurrency",
         "ops"
+      ],
+      "tests": [
+        "api_contacts::preparation::preparation_failure_creates_no_contact"
       ]
     },
     "AC-25": {
@@ -732,7 +893,7 @@
         "P16-T08",
         "P18-T05"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -742,6 +903,10 @@
         "web",
         "e2e",
         "ops"
+      ],
+      "tests": [
+        "api_moderation_accounts::old_session_cannot_contact_or_publish_after_suspension",
+        "api_moderation::suspended_request_cannot_be_shared_offered_or_contacted"
       ]
     },
     "AC-26": {
@@ -751,7 +916,7 @@
         "P08-T04",
         "P16-T05"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
@@ -759,6 +924,10 @@
         "privacy",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_offer_withdrawal::withdrawal_after_contact_preserves_history_without_inference",
+        "api_offer_withdrawal::withdrawn_offers_leave_action_and_contact"
       ]
     },
     "AC-27": {
@@ -767,7 +936,7 @@
         "P08-T05",
         "P16-T05"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -776,6 +945,10 @@
         "web",
         "e2e",
         "privacy"
+      ],
+      "tests": [
+        "postgres_contact_limits::independent_demands_share_no_winner_or_sale",
+        "concurrency_contacts::contact_first_preserves_valid_initiation"
       ]
     },
     "AC-28": {
@@ -787,7 +960,7 @@
         "P16-T05",
         "P19-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -796,6 +969,10 @@
         "privacy",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_lifecycle_journeys::completed_journey_reconciles_end_to_end",
+        "api_request_outcomes::completion_without_offers_credits_no_seller"
       ]
     },
     "AC-29": {
@@ -804,7 +981,7 @@
         "P09-T01",
         "P16-T05"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -813,6 +990,11 @@
         "web",
         "e2e",
         "privacy"
+      ],
+      "tests": [
+        "api_request_outcomes::uncontacted_foreign_attribution_is_refused",
+        "api_request_outcomes::completion_without_offers_credits_no_seller",
+        "web:tests/e2e/contact-outcome.spec.ts#declarations stay honest with disciplined attribution"
       ]
     },
     "AC-30": {
@@ -824,7 +1006,7 @@
         "P16-T03",
         "P16-T05"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -833,6 +1015,10 @@
         "privacy",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_lifecycle_journeys::cancelled_journey_reconciles_end_to_end",
+        "api_request_outcomes::completed_cancelled_and_expired_facts_stay_distinguishable"
       ]
     },
     "AC-31": {
@@ -845,7 +1031,7 @@
         "P16-T05",
         "P19-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -855,6 +1041,10 @@
         "web",
         "e2e",
         "privacy"
+      ],
+      "tests": [
+        "postgres_metrics::empty_and_immature_are_not_false_zero",
+        "api_request_outcomes::completed_cancelled_and_expired_facts_stay_distinguishable"
       ]
     },
     "AC-32": {
@@ -864,7 +1054,7 @@
         "P15-T04",
         "P16-T02"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -872,6 +1062,11 @@
         "privacy",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "web:tests/e2e/auth.spec.ts#login from a shared request returns to the current valid context",
+        "web:tests/navigation.spec.ts#shared request entry returns to the intended resource after login",
+        "api_share_attribution::attributable_uses_correct_window_and_source"
       ]
     },
     "AC-33": {
@@ -882,7 +1077,7 @@
         "P16-T06",
         "P19-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -891,6 +1086,11 @@
         "web",
         "e2e",
         "concurrency"
+      ],
+      "tests": [
+        "api_sharing::active_prepared_share_contains_only_public_context",
+        "api_sharing::share_fact_is_not_contact_or_delivery",
+        "web:tests/e2e/safety.spec.ts#share carries public context and unpublished needs refuse"
       ]
     },
     "AC-34": {
@@ -904,7 +1104,7 @@
         "P15-T04",
         "P16-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
@@ -912,6 +1112,11 @@
         "concurrency",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_public_requests::suspended_removed_link_exposes_nothing",
+        "api_public_html::suspended_deleted_absent_from_html",
+        "web:tests/e2e/discovery.spec.ts#blocked viewer and suspended link show no protected content"
       ]
     },
     "AC-35": {
@@ -925,7 +1130,7 @@
         "P17-T04",
         "P19-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -935,6 +1140,11 @@
         "web",
         "e2e",
         "critical-mutations"
+      ],
+      "tests": [
+        "api_blocks::blocking_after_contact_stops_handoffs_preserves_prior",
+        "postgres_blocks::either_direction_prevents_new_pair_interaction",
+        "web:tests/e2e/safety.spec.ts#block stops contact, unblock restores, withdrawn stays reportable"
       ]
     },
     "AC-36": {
@@ -944,7 +1154,7 @@
         "P10-T06",
         "P16-T06"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
@@ -952,6 +1162,11 @@
         "privacy",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_blocks::unblocking_cannot_revive_previous_offers",
+        "api_safety_journeys::unblock_keeps_old_offer_dead_and_new_cycle_possible",
+        "web:tests/e2e/safety.spec.ts#block stops contact, unblock restores, withdrawn stays reportable"
       ]
     },
     "AC-37": {
@@ -960,7 +1175,7 @@
         "P10-T04",
         "P16-T06"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -968,6 +1183,10 @@
         "privacy",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_reports::historical_contacted_closed_request_can_be_reported",
+        "web:tests/e2e/safety.spec.ts#block stops contact, unblock restores, withdrawn stays reportable"
       ]
     },
     "AC-38": {
@@ -979,7 +1198,7 @@
         "P16-T06",
         "P16-T07"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
@@ -988,6 +1207,11 @@
         "unit",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_reports::duplicate_filings_group_into_one_case",
+        "concurrency_reports::concurrent_repeats_yield_one_case_plus_information",
+        "postgres_metrics::reviewed_incident_rate_differs_from_raw_volume"
       ]
     },
     "AC-39": {
@@ -1001,7 +1225,7 @@
         "P16-T07",
         "P19-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
@@ -1010,6 +1234,10 @@
         "concurrency",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_moderation_accounts::reversal_restores_only_account_eligibility",
+        "web:tests/e2e/staff.spec.ts#reasoned review and disposition take inspectable effect"
       ]
     },
     "AC-40": {
@@ -1021,7 +1249,7 @@
         "P16-T06",
         "P19-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
@@ -1030,6 +1258,11 @@
         "ops",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_account_deletion::buyer_and_seller_journeys_close_correctly",
+        "api_account_deletion::deleted_parties_cannot_disclose_or_mutate_with_old_cookie",
+        "postgres_retention::no_deleted_destination_readable"
       ]
     },
     "AC-41": {
@@ -1039,7 +1272,7 @@
         "P12-T05",
         "P16-T02"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -1048,6 +1281,11 @@
         "concurrency",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_accounts::locality_change_touches_only_the_user_row",
+        "api_identity_history::default_city_change_does_not_rewrite_locality",
+        "web:tests/e2e/auth.spec.ts#profile move keeps request locality and phone conflicts refuse safely"
       ]
     },
     "AC-42": {
@@ -1057,7 +1295,7 @@
         "P14-T02",
         "P16-T06"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -1066,6 +1304,12 @@
         "privacy",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_feedback::window_boundaries_behave_precisely",
+        "api_feedback::repeat_handoffs_keep_single_credit",
+        "api_feedback::stranger_and_foreign_feedback_refused",
+        "api_reputation::negative_unreviewed_feedback_publishes_no_badge"
       ]
     },
     "AC-43": {
@@ -1075,7 +1319,7 @@
         "P16-T07",
         "P19-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
@@ -1083,6 +1327,11 @@
         "privacy",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_policy_changes::paid_professional_no_prohibition_exception",
+        "api_policy_changes::prohibition_winning_contact_race_reveals_nothing",
+        "api_policy_changes::threshold_change_prospective_history_traceable"
       ]
     },
     "AC-44": {
@@ -1095,7 +1344,7 @@
         "P19-T01",
         "P19-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -1105,25 +1354,40 @@
         "e2e",
         "concurrency",
         "ops"
+      ],
+      "tests": [
+        "api_profiles::free_declared_professional_keeps_ordinary_capabilities",
+        "api_profiles::declaration_grants_no_staff_or_badge",
+        "postgres_metrics::free_professional_activity_does_not_imply_paid_customer",
+        "web:tests/e2e/safety.spec.ts#free professional offers work with factual reputation"
       ]
     },
     "AC-45": {
       "disposition": "future-deferred",
       "proving_tasks": [],
-      "status": "planned",
-      "tiers": []
+      "status": "future",
+      "tiers": [],
+      "tests": [
+        "lib:application::operational_metrics::tests::declaration_alone_never_implies_paid"
+      ]
     },
     "AC-46": {
       "disposition": "future-deferred",
       "proving_tasks": [],
-      "status": "planned",
-      "tiers": []
+      "status": "future",
+      "tiers": [],
+      "tests": [
+        "lib:application::operational_metrics::tests::declaration_alone_never_implies_paid"
+      ]
     },
     "AC-47": {
       "disposition": "future-deferred",
       "proving_tasks": [],
-      "status": "planned",
-      "tiers": []
+      "status": "future",
+      "tiers": [],
+      "tests": [
+        "lib:application::operational_metrics::tests::declaration_alone_never_implies_paid"
+      ]
     },
     "AC-48": {
       "disposition": "mandatory",
@@ -1134,7 +1398,7 @@
         "P17-T01",
         "P19-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -1143,6 +1407,9 @@
         "e2e",
         "privacy",
         "concurrency"
+      ],
+      "tests": [
+        "postgres_metrics::one_request_two_contacts_north_star_two"
       ]
     },
     "AC-49": {
@@ -1156,7 +1423,7 @@
         "P16-T07",
         "P19-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -1166,6 +1433,11 @@
         "privacy",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "postgres_expiry::suspended_expired_stays_hidden_and_becomes_expired",
+        "api_moderation::deadline_runs_and_expiry_stays_hidden",
+        "api_moderation_accounts::restore_after_expiry_never_revives_offer"
       ]
     },
     "AC-50": {
@@ -1177,7 +1449,7 @@
         "P17-T01",
         "P19-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
@@ -1186,6 +1458,10 @@
         "web",
         "e2e",
         "unit"
+      ],
+      "tests": [
+        "api_policy_changes::threshold_change_prospective_history_traceable",
+        "api_metrics::policy_change_and_correction_differ_independently"
       ]
     },
     "EC-01": {
@@ -1193,12 +1469,15 @@
       "proving_tasks": [
         "P12-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
         "concurrency",
         "privacy"
+      ],
+      "tests": [
+        "api_account_deletion::buyer_and_seller_journeys_close_correctly"
       ]
     },
     "EC-02": {
@@ -1206,12 +1485,15 @@
       "proving_tasks": [
         "P12-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
         "concurrency",
         "privacy"
+      ],
+      "tests": [
+        "api_account_deletion::buyer_and_seller_journeys_close_correctly"
       ]
     },
     "EC-03": {
@@ -1222,13 +1504,17 @@
         "P07-T08",
         "P09-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "privacy",
         "concurrency"
+      ],
+      "tests": [
+        "postgres_offer_cascades::closure_submission_race_leaves_no_live_offer",
+        "api_lifecycle_journeys::completed_journey_reconciles_end_to_end"
       ]
     },
     "EC-04": {
@@ -1238,13 +1524,16 @@
         "P08-T04",
         "P14-T05"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
         "concurrency",
         "privacy",
         "unit"
+      ],
+      "tests": [
+        "api_offer_withdrawal::withdrawal_after_contact_preserves_history_without_inference"
       ]
     },
     "EC-05": {
@@ -1252,12 +1541,16 @@
       "proving_tasks": [
         "P11-T05"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
         "concurrency",
         "privacy"
+      ],
+      "tests": [
+        "api_moderation_accounts::banned_parties_cannot_mutate_or_reveal",
+        "api_moderation_accounts::ban_winning_contact_race_refuses_history_remains"
       ]
     },
     "EC-06": {
@@ -1265,12 +1558,15 @@
       "proving_tasks": [
         "P11-T05"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
         "concurrency",
         "privacy"
+      ],
+      "tests": [
+        "api_moderation_accounts::banned_parties_cannot_mutate_or_reveal"
       ]
     },
     "EC-07": {
@@ -1282,13 +1578,18 @@
         "P08-T06",
         "P17-T03"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "concurrency",
         "privacy"
+      ],
+      "tests": [
+        "deadline_requests::concurrent_expiry_racers_record_one_fact",
+        "deadline_requests::repeated_expiry_records_exactly_one_fact",
+        "concurrency_contacts::stale_deadline_and_retry_policy_have_defined_errors"
       ]
     },
     "EC-08": {
@@ -1299,13 +1600,18 @@
         "P09-T04",
         "P14-T05"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "concurrency",
         "privacy"
+      ],
+      "tests": [
+        "api_request_renewal::valid_renewal_increments_cycle_and_activation_once",
+        "api_request_renewal::early_renewal_and_unconfirmed_paths_produce_no_cycle",
+        "postgres_offer_cascades::renewal_retires_previous_cycle_without_revival"
       ]
     },
     "EC-09": {
@@ -1314,12 +1620,15 @@
         "P06-T01",
         "P07-T08"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "concurrency"
+      ],
+      "tests": [
+        "request_revision::budget_up_and_down_are_material_within_three_a_day"
       ]
     },
     "EC-10": {
@@ -1329,13 +1638,18 @@
         "P08-T01",
         "P08-T06"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "concurrency",
         "privacy"
+      ],
+      "tests": [
+        "api_offer_edits::price_update_fits_budget_or_is_refused",
+        "api_offer_edits::stale_expected_revision_refuses_edit_and_contact",
+        "api_offer_edits::viewed_state_and_snapshot_survive_edits"
       ]
     },
     "EC-11": {
@@ -1344,14 +1658,18 @@
         "P07-T07",
         "P16-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
         "web",
         "e2e",
         "privacy"
-      ]
+      ],
+      "tests": [
+        "api_offer_withdrawal::withdrawn_offers_leave_action_and_contact"
+      ],
+      "note": "No sale primitive exists; withdrawn-unavailable refusal is the live analog, proven."
     },
     "EC-12": {
       "disposition": "mandatory",
@@ -1359,12 +1677,16 @@
         "P07-T07",
         "P08-T05"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
         "unit",
         "concurrency"
+      ],
+      "tests": [
+        "api_contacts::valid_buyer_contact_succeeds_while_others_refuse",
+        "postgres_contact_limits::eleventh_distinct_seller_is_refused_while_repeats_pass"
       ]
     },
     "EC-13": {
@@ -1375,7 +1697,7 @@
         "P08-T05",
         "P16-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
@@ -1384,6 +1706,10 @@
         "unit",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "postgres_offer_limits::eleventh_successful_submission_is_denied",
+        "web:tests/e2e/offers.spec.ts#buyer compares offers and sees revision standing"
       ]
     },
     "EC-14": {
@@ -1393,12 +1719,15 @@
         "P10-T03",
         "P10-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
         "privacy",
         "unit"
+      ],
+      "tests": [
+        "api_reports::historical_contacted_closed_request_can_be_reported"
       ]
     },
     "EC-15": {
@@ -1411,7 +1740,7 @@
         "P13-T06",
         "P16-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
@@ -1420,6 +1749,11 @@
         "concurrency",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_sharing::suspended_removed_share_refused",
+        "api_public_requests::suspended_removed_link_exposes_nothing",
+        "web:tests/e2e/discovery.spec.ts#blocked viewer and suspended link show no protected content"
       ]
     },
     "EC-16": {
@@ -1429,12 +1763,16 @@
         "P13-T02",
         "P13-T06"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
         "concurrency",
         "privacy"
+      ],
+      "tests": [
+        "api_policy_changes::prohibition_winning_contact_race_reveals_nothing",
+        "postgres_catalogs::excluded_classes_cannot_be_activated_by_client_labels"
       ]
     },
     "EC-17": {
@@ -1445,7 +1783,7 @@
         "P13-T01",
         "P16-T02"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -1454,6 +1792,11 @@
         "concurrency",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_identity_history::default_city_change_does_not_rewrite_locality",
+        "api_accounts::locality_change_touches_only_the_user_row",
+        "web:tests/e2e/auth.spec.ts#profile move keeps request locality and phone conflicts refuse safely"
       ]
     },
     "EC-18": {
@@ -1462,7 +1805,7 @@
         "P04-T09",
         "P17-T01"
       ],
-      "status": "planned",
+      "status": "future",
       "tiers": [
         "unit",
         "integration",
@@ -1470,6 +1813,9 @@
         "privacy",
         "concurrency",
         "e2e"
+      ],
+      "tests": [
+        "api_profiles::free_declared_professional_keeps_ordinary_capabilities"
       ]
     },
     "EC-19": {
@@ -1481,7 +1827,7 @@
         "P11-T04",
         "P11-T06"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -1489,6 +1835,10 @@
         "concurrency",
         "ops",
         "privacy"
+      ],
+      "tests": [
+        "api_moderation_accounts::restore_after_expiry_never_revives_offer",
+        "postgres_restoration::restoration_after_deadline_returns_expired_hidden"
       ]
     },
     "EC-20": {
@@ -1498,13 +1848,17 @@
         "P09-T01",
         "P11-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "concurrency",
         "privacy"
+      ],
+      "tests": [
+        "api_request_outcomes::suspended_buyer_completes_without_restoring_contact",
+        "api_moderation_accounts::suspended_buyer_completes_own_request_hidden"
       ]
     },
     "EC-21": {
@@ -1515,7 +1869,7 @@
         "P12-T05",
         "P16-T02"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
@@ -1523,6 +1877,10 @@
         "privacy",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_phone_change::failed_new_verification_leaves_old_destination_unchanged",
+        "api_identity_history::new_handoff_uses_new_destination_prior_terms_intact"
       ]
     },
     "EC-22": {
@@ -1535,7 +1893,7 @@
         "P12-T05",
         "P16-T02"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "concurrency",
@@ -1543,6 +1901,11 @@
         "api",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_phone_change::no_number_leaks_through_public_dto_or_conflict",
+        "api_phone_change::competing_accounts_produce_one_permitted_assignment",
+        "web:tests/e2e/auth.spec.ts#profile move keeps request locality and phone conflicts refuse safely"
       ]
     },
     "EC-23": {
@@ -1554,13 +1917,18 @@
         "P10-T02",
         "P10-T06"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
         "concurrency",
         "privacy",
         "unit"
+      ],
+      "tests": [
+        "api_blocks::blocking_after_contact_stops_handoffs_preserves_prior",
+        "concurrency_contacts::block_winning_contact_race_yields_no_destination",
+        "web:tests/e2e/safety.spec.ts#block stops contact, unblock restores, withdrawn stays reportable"
       ]
     },
     "EC-24": {
@@ -1569,12 +1937,16 @@
         "P10-T02",
         "P10-T06"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
         "concurrency",
         "privacy"
+      ],
+      "tests": [
+        "api_blocks::unblocking_cannot_revive_previous_offers",
+        "api_safety_journeys::unblock_keeps_old_offer_dead_and_new_cycle_possible"
       ]
     },
     "EC-25": {
@@ -1588,12 +1960,17 @@
         "P08-T06",
         "P17-T03"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "concurrency",
         "privacy",
         "api"
+      ],
+      "tests": [
+        "postgres_contacts::same_retry_records_one_unique_contact",
+        "concurrency_outcomes::duplicate_final_answers_converge_on_one_outcome",
+        "postgres_idempotency::concurrent_duplicate_actions_create_one_fact"
       ]
     },
     "EC-26": {
@@ -1602,12 +1979,15 @@
         "P06-T06",
         "P09-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "concurrency"
+      ],
+      "tests": [
+        "api_request_outcomes::completion_without_offers_credits_no_seller"
       ]
     },
     "EC-27": {
@@ -1619,13 +1999,18 @@
         "P09-T04",
         "P11-T07"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "privacy",
         "concurrency"
+      ],
+      "tests": [
+        "api_lifecycle_journeys::completed_journey_reconciles_end_to_end",
+        "api_lifecycle_journeys::cancelled_journey_reconciles_end_to_end",
+        "api_request_outcomes::completed_cancelled_and_expired_facts_stay_distinguishable"
       ]
     },
     "EC-28": {
@@ -1635,13 +2020,16 @@
         "P11-T03",
         "P11-T06"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "privacy",
         "concurrency"
+      ],
+      "tests": [
+        "request_revision::terminal_rows_refuse_while_expired_and_suspended_revise_privately"
       ]
     },
     "EC-29": {
@@ -1649,7 +2037,7 @@
       "proving_tasks": [
         "P17-T01"
       ],
-      "status": "planned",
+      "status": "future",
       "tiers": [
         "unit",
         "integration",
@@ -1657,6 +2045,9 @@
         "concurrency",
         "privacy",
         "e2e"
+      ],
+      "tests": [
+        "lib:application::operational_metrics::tests::declaration_alone_never_implies_paid"
       ]
     },
     "EC-30": {
@@ -1664,7 +2055,7 @@
       "proving_tasks": [
         "P17-T01"
       ],
-      "status": "planned",
+      "status": "future",
       "tiers": [
         "unit",
         "integration",
@@ -1672,6 +2063,9 @@
         "concurrency",
         "privacy",
         "e2e"
+      ],
+      "tests": [
+        "lib:application::operational_metrics::tests::declaration_alone_never_implies_paid"
       ]
     },
     "EC-31": {
@@ -1681,13 +2075,17 @@
         "P10-T05",
         "P11-T02"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "privacy",
         "concurrency"
+      ],
+      "tests": [
+        "api_reports::duplicate_filings_group_into_one_case",
+        "concurrency_reports::concurrent_repeats_yield_one_case_plus_information"
       ]
     },
     "EC-32": {
@@ -1697,13 +2095,17 @@
         "P05-T06",
         "P06-T07"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "concurrency",
         "privacy"
+      ],
+      "tests": [
+        "postgres_request_limits::fourth_open_request_is_refused_while_ended_rows_free_slots",
+        "postgres_request_limits::seventh_in_window_activation_is_refused"
       ]
     },
     "EC-33": {
@@ -1712,12 +2114,15 @@
         "P07-T03",
         "P07-T08"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "concurrency"
+      ],
+      "tests": [
+        "postgres_offer_cascades::material_edit_and_resubmission_match_latest_requirements"
       ]
     },
     "EC-34": {
@@ -1729,14 +2134,19 @@
         "P13-T05",
         "P17-T03"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "privacy",
         "concurrency"
-      ]
+      ],
+      "tests": [
+        "api_offer_edits::stale_expected_revision_refuses_edit_and_contact",
+        "postgres_offer_cascades::material_edit_and_resubmission_match_latest_requirements"
+      ],
+      "note": "Submitted-revision staleness proven; unsent-draft aspect lives in the editor confirmation gate."
     },
     "EC-35": {
       "disposition": "mandatory",
@@ -1746,13 +2156,17 @@
         "P11-T08",
         "P13-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "concurrency",
         "privacy"
+      ],
+      "tests": [
+        "postgres_catalogs::catalog_changes_preserve_stable_identity",
+        "postgres_catalogs::same_named_regions_in_different_cities_stay_distinct"
       ]
     },
     "EC-36": {
@@ -1767,7 +2181,7 @@
         "P11-T08",
         "P16-T07"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "concurrency",
@@ -1775,6 +2189,10 @@
         "api",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "postgres_restoration::lifting_cannot_override_ban_or_block",
+        "web:tests/e2e/staff.spec.ts#lifting one restriction leaves other prohibitions intact"
       ]
     },
     "EC-37": {
@@ -1786,7 +2204,7 @@
         "P13-T05",
         "P16-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
@@ -1794,6 +2212,10 @@
         "unit",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "api_public_html::html_identifies_item_budget_region",
+        "api_sharing::active_prepared_share_contains_only_public_context"
       ]
     },
     "EC-38": {
@@ -1804,7 +2226,7 @@
         "P12-T02",
         "P12-T03"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "privacy",
@@ -1812,6 +2234,10 @@
         "concurrency",
         "unit",
         "ops"
+      ],
+      "tests": [
+        "api_account_deletion::buyer_and_seller_journeys_close_correctly",
+        "postgres_retention::due_ordinary_absent_incident_subset_remains"
       ]
     },
     "INV-01": {
@@ -1823,12 +2249,17 @@
         "P05-T03",
         "P17-T02"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "api",
         "privacy",
         "integration"
+      ],
+      "tests": [
+        "postgres_requests::no_orphan_cycle_revision_or_negative_budget_is_persisted",
+        "postgres_offers::no_orphan_offer_or_negative_price_is_persisted",
+        "api_contract::caller_cannot_smuggle_ownership_state_or_role"
       ]
     },
     "INV-02": {
@@ -1838,12 +2269,15 @@
         "P07-T01",
         "P17-T02"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "concurrency",
         "api",
         "privacy"
+      ],
+      "tests": [
+        "postgres_offers::no_orphan_offer_or_negative_price_is_persisted"
       ]
     },
     "INV-03": {
@@ -1853,13 +2287,16 @@
         "P07-T02",
         "P17-T02"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "concurrency",
         "unit",
         "api",
         "privacy"
+      ],
+      "tests": [
+        "postgres_offers::no_orphan_offer_or_negative_price_is_persisted"
       ]
     },
     "INV-04": {
@@ -1877,7 +2314,7 @@
         "P17-T02",
         "P17-T05"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "concurrency",
@@ -1885,6 +2322,11 @@
         "unit",
         "api",
         "ops"
+      ],
+      "tests": [
+        "postgres_eligibility::restricted_states_denied_despite_valid_session",
+        "api_moderation_accounts::banned_parties_cannot_mutate_or_reveal",
+        "api_auth::suspended_account_cannot_write_with_previous_cookie"
       ]
     },
     "INV-05": {
@@ -1907,7 +2349,7 @@
         "P17-T02",
         "P17-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "api",
@@ -1915,6 +2357,11 @@
         "integration",
         "web",
         "critical-mutations"
+      ],
+      "tests": [
+        "api_staff_auth::regular_professional_cannot_self_grant_or_forge",
+        "api_contract::caller_cannot_smuggle_ownership_state_or_role",
+        "web:tests/navigation.spec.ts#switching accounts cannot see prior private offers or destination"
       ]
     },
     "INV-06": {
@@ -1924,12 +2371,16 @@
         "P11-T01",
         "P17-T02"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "privacy"
+      ],
+      "tests": [
+        "api_policy_changes::paid_professional_no_prohibition_exception",
+        "api_profiles::declaration_grants_no_staff_or_badge"
       ]
     },
     "INV-07": {
@@ -1944,7 +2395,7 @@
         "P12-T05",
         "P16-T02"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "concurrency",
@@ -1953,6 +2404,11 @@
         "api",
         "web",
         "e2e"
+      ],
+      "tests": [
+        "postgres_users::formatting_variants_contend_for_one_current_phone_identity",
+        "postgres_users::non_deleted_duplicate_rejected_by_app_and_database",
+        "api_phone_change::competing_accounts_produce_one_permitted_assignment"
       ]
     },
     "INV-08": {
@@ -1969,13 +2425,17 @@
         "P13-T01",
         "P17-T03"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "privacy",
         "concurrency"
+      ],
+      "tests": [
+        "api_requests::each_invalid_requirement_is_refused_without_event",
+        "api_requests::valid_minimal_request_becomes_active_with_seven_day_deadline"
       ]
     },
     "INV-09": {
@@ -2008,7 +2468,7 @@
         "P20-T03",
         "P20-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -2020,6 +2480,10 @@
         "e2e",
         "critical-mutations",
         "load"
+      ],
+      "tests": [
+        "api_requests::elapsed_active_row_has_no_offer_or_contact_action",
+        "deadline_requests::eligibility_denies_the_exact_deadline_despite_recorded_state"
       ]
     },
     "INV-10": {
@@ -2030,12 +2494,16 @@
         "P05-T02",
         "P05-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "privacy",
         "api"
+      ],
+      "tests": [
+        "domain_vectors::contract_money_vectors_hold_exactly",
+        "domain_vectors::budget_compatibility_follows_inv19_ac16"
       ]
     },
     "INV-11": {
@@ -2047,13 +2515,17 @@
         "P05-T04",
         "P05-T06"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "privacy",
         "concurrency"
+      ],
+      "tests": [
+        "api_requests::each_invalid_requirement_is_refused_without_event",
+        "lib:application::request_drafts::tests::missing_keys_name_their_field"
       ]
     },
     "INV-12": {
@@ -2067,7 +2539,7 @@
         "P14-T03",
         "P14-T05"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "privacy",
@@ -2075,6 +2547,10 @@
         "api",
         "concurrency",
         "ops"
+      ],
+      "tests": [
+        "deadline_vectors::renewal_keeps_original_publication_age",
+        "api_request_renewal::valid_renewal_increments_cycle_and_activation_once"
       ]
     },
     "INV-13": {
@@ -2089,7 +2565,7 @@
         "P09-T04",
         "P14-T03"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "concurrency",
@@ -2097,6 +2573,12 @@
         "unit",
         "api",
         "privacy"
+      ],
+      "tests": [
+        "api_request_outcomes::completed_cancelled_and_expired_facts_stay_distinguishable",
+        "api_lifecycle_journeys::completed_journey_reconciles_end_to_end",
+        "api_lifecycle_journeys::cancelled_journey_reconciles_end_to_end",
+        "api_lifecycle_journeys::expired_journey_reconciles_end_to_end"
       ]
     },
     "INV-14": {
@@ -2108,13 +2590,17 @@
         "P07-T08",
         "P17-T03"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "privacy",
         "unit",
         "api",
         "concurrency"
+      ],
+      "tests": [
+        "request_revision::budget_up_and_down_are_material_within_three_a_day",
+        "postgres_offer_cascades::material_edit_and_resubmission_match_latest_requirements"
       ]
     },
     "INV-15": {
@@ -2131,7 +2617,7 @@
         "P17-T03",
         "P19-T02"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -2139,6 +2625,10 @@
         "concurrency",
         "privacy",
         "load"
+      ],
+      "tests": [
+        "api_request_removal::active_removal_stops_activity_and_keeps_quota_history",
+        "postgres_request_limits::rolling_boundary_ignores_elapsed_facts"
       ]
     },
     "INV-16": {
@@ -2149,13 +2639,17 @@
         "P12-T05",
         "P13-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "privacy",
         "concurrency"
+      ],
+      "tests": [
+        "api_identity_history::default_city_change_does_not_rewrite_locality",
+        "api_accounts::locality_change_touches_only_the_user_row"
       ]
     },
     "INV-17": {
@@ -2163,12 +2657,16 @@
       "proving_tasks": [
         "P07-T02"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "privacy"
+      ],
+      "tests": [
+        "api_offers::valid_used_offer_matches_used_demand",
+        "api_offers::incompatible_submissions_refuse_without_new_offer"
       ]
     },
     "INV-18": {
@@ -2182,7 +2680,7 @@
         "P17-T03",
         "P19-T02"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "concurrency",
@@ -2190,6 +2688,10 @@
         "api",
         "privacy",
         "load"
+      ],
+      "tests": [
+        "postgres_offers::concurrent_same_seller_cycle_has_one_slot",
+        "postgres_offer_limits::withdrawn_and_rejected_slots_stay_taken"
       ]
     },
     "INV-19": {
@@ -2202,7 +2704,7 @@
         "P07-T06",
         "P17-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -2210,6 +2712,10 @@
         "api",
         "privacy",
         "critical-mutations"
+      ],
+      "tests": [
+        "domain_vectors::budget_compatibility_follows_inv19_ac16",
+        "api_offer_edits::price_update_fits_budget_or_is_refused"
       ]
     },
     "INV-20": {
@@ -2218,12 +2724,16 @@
         "P03-T03",
         "P07-T02"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "privacy"
+      ],
+      "tests": [
+        "domain_vectors::condition_acceptance_follows_inv20",
+        "api_offers::incompatible_submissions_refuse_without_new_offer"
       ]
     },
     "INV-21": {
@@ -2231,12 +2741,16 @@
       "proving_tasks": [
         "P07-T02"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "privacy"
+      ],
+      "tests": [
+        "api_offers::valid_used_offer_matches_used_demand",
+        "lib:application::submit_offer::tests::phone_shaped_text_and_bad_shapes_are_refused"
       ]
     },
     "INV-22": {
@@ -2247,12 +2761,16 @@
         "P07-T02",
         "P13-T01"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "privacy"
+      ],
+      "tests": [
+        "api_requests::each_invalid_requirement_is_refused_without_event",
+        "postgres_discovery::same_region_label_never_leaks_cross_city"
       ]
     },
     "INV-23": {
@@ -2261,12 +2779,15 @@
         "P07-T07",
         "P08-T05"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
         "unit",
         "concurrency"
+      ],
+      "tests": [
+        "postgres_contact_limits::independent_demands_share_no_winner_or_sale"
       ]
     },
     "INV-24": {
@@ -2283,7 +2804,7 @@
         "P17-T03",
         "P18-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "privacy",
@@ -2291,6 +2812,10 @@
         "concurrency",
         "unit",
         "ops"
+      ],
+      "tests": [
+        "api_offer_edits::viewed_state_and_snapshot_survive_edits",
+        "postgres_contacts::reload_preserves_original_item_and_price"
       ]
     },
     "INV-25": {
@@ -2308,13 +2833,17 @@
         "P12-T01",
         "P14-T05"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
         "privacy",
         "concurrency",
         "unit"
+      ],
+      "tests": [
+        "api_offer_withdrawal::withdrawn_offers_leave_action_and_contact",
+        "postgres_contacts::restriction_before_replay_returns_no_destination"
       ]
     },
     "INV-26": {
@@ -2325,13 +2854,16 @@
         "P09-T04",
         "P11-T06"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "concurrency",
         "privacy"
+      ],
+      "tests": [
+        "postgres_offer_cascades::renewal_retires_previous_cycle_without_revival"
       ]
     },
     "INV-27": {
@@ -2341,12 +2873,15 @@
         "P08-T02",
         "P17-T02"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "privacy"
+      ],
+      "tests": [
+        "api_contacts::valid_buyer_contact_succeeds_while_others_refuse"
       ]
     },
     "INV-28": {
@@ -2375,7 +2910,7 @@
         "P20-T03",
         "P20-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
@@ -2387,6 +2922,11 @@
         "critical-mutations",
         "ops",
         "load"
+      ],
+      "tests": [
+        "concurrency_contacts::restriction_first_disables_handoff",
+        "concurrency_contacts::block_winning_contact_race_yields_no_destination",
+        "api_contacts::refusals_carry_no_destination"
       ]
     },
     "INV-29": {
@@ -2400,7 +2940,7 @@
         "P12-T04",
         "P15-T02"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "concurrency",
@@ -2408,6 +2948,10 @@
         "unit",
         "api",
         "web"
+      ],
+      "tests": [
+        "postgres_contacts::public_projections_cannot_include_historical_destination",
+        "api_contacts::preparation::destination_absent_from_public_surfaces"
       ]
     },
     "INV-30": {
@@ -2420,12 +2964,16 @@
         "P08-T03",
         "P12-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "privacy"
+      ],
+      "tests": [
+        "api_offers::buyer_phone_is_absent_from_seller_submission_response",
+        "api_offer_reads::unrelated_buyers_and_anonymous_read_nothing_private"
       ]
     },
     "INV-31": {
@@ -2475,7 +3023,7 @@
         "P20-T03",
         "P20-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "privacy",
@@ -2486,6 +3034,11 @@
         "web",
         "e2e",
         "load"
+      ],
+      "tests": [
+        "privacy_surfaces::public_and_unowned_responses_exclude_canaries",
+        "api_contract::public_json_contains_only_allowlisted_fields",
+        "privacy_logging::canary_secrets_are_absent_from_logs_and_failure_formatting"
       ]
     },
     "INV-32": {
@@ -2494,12 +3047,15 @@
         "P08-T03",
         "P12-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "privacy"
+      ],
+      "tests": [
+        "privacy_surfaces::valid_handoff_reveals_only_selected_seller_destination"
       ]
     },
     "INV-33": {
@@ -2510,13 +3066,18 @@
         "P13-T04",
         "P14-T03"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "concurrency",
         "privacy",
         "unit",
         "api"
+      ],
+      "tests": [
+        "api_reputation::contact_alone_claims_no_verified_sale",
+        "postgres_contact_limits::independent_demands_share_no_winner_or_sale",
+        "web:tests/e2e/contact-outcome.spec.ts#declarations stay honest with disciplined attribution"
       ]
     },
     "INV-34": {
@@ -2549,7 +3110,7 @@
         "P20-T03",
         "P20-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "privacy",
@@ -2561,6 +3122,11 @@
         "critical-mutations",
         "e2e",
         "load"
+      ],
+      "tests": [
+        "postgres_idempotency::concurrent_duplicate_actions_create_one_fact",
+        "postgres_contacts::identical_action_identities_create_one_unique_contact",
+        "api_request_removal::repeated_remove_converges_and_strangers_remove_nothing"
       ]
     },
     "INV-35": {
@@ -2574,13 +3140,17 @@
         "P13-T02",
         "P13-T06"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "privacy",
         "concurrency"
+      ],
+      "tests": [
+        "postgres_blocks::either_direction_prevents_new_pair_interaction",
+        "api_blocks::blocking_after_contact_stops_handoffs_preserves_prior"
       ]
     },
     "INV-36": {
@@ -2596,13 +3166,17 @@
         "P14-T01",
         "P14-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "concurrency",
         "privacy"
+      ],
+      "tests": [
+        "postgres_reports::report_is_distinct_from_validated_incident",
+        "api_reports::creating_report_changes_no_trust_or_ban_state"
       ]
     },
     "INV-37": {
@@ -2619,7 +3193,7 @@
         "P14-T06",
         "P18-T06"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
@@ -2627,6 +3201,10 @@
         "unit",
         "concurrency",
         "ops"
+      ],
+      "tests": [
+        "api_staff_auth::authorized_sensitive_read_audits_without_reporter_exposure",
+        "web:tests/e2e/staff.spec.ts#reasoned review and disposition take inspectable effect"
       ]
     },
     "INV-38": {
@@ -2644,12 +3222,16 @@
         "P17-T03",
         "P20-T03"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "concurrency",
         "privacy",
         "api"
+      ],
+      "tests": [
+        "postgres_restoration::lifting_cannot_override_ban_or_block",
+        "web:tests/e2e/staff.spec.ts#lifting one restriction leaves other prohibitions intact"
       ]
     },
     "INV-39": {
@@ -2660,13 +3242,18 @@
         "P14-T04",
         "P19-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "privacy",
         "ops"
+      ],
+      "tests": [
+        "api_profiles::declaration_grants_no_staff_or_badge",
+        "api_reputation::profile_excludes_private_history",
+        "lib:application::operational_metrics::tests::declaration_alone_never_implies_paid"
       ]
     },
     "INV-40": {
@@ -2675,7 +3262,7 @@
         "P17-T01",
         "P19-T04"
       ],
-      "status": "planned",
+      "status": "future",
       "tiers": [
         "unit",
         "integration",
@@ -2684,6 +3271,9 @@
         "privacy",
         "e2e",
         "ops"
+      ],
+      "tests": [
+        "lib:application::operational_metrics::tests::declaration_alone_never_implies_paid"
       ]
     },
     "INV-41": {
@@ -2692,7 +3282,7 @@
         "P17-T01",
         "P19-T04"
       ],
-      "status": "planned",
+      "status": "future",
       "tiers": [
         "unit",
         "integration",
@@ -2701,6 +3291,9 @@
         "privacy",
         "e2e",
         "ops"
+      ],
+      "tests": [
+        "lib:application::operational_metrics::tests::declaration_alone_never_implies_paid"
       ]
     },
     "INV-42": {
@@ -2716,7 +3309,7 @@
         "P14-T05",
         "P14-T06"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
@@ -2724,6 +3317,11 @@
         "concurrency",
         "ops",
         "unit"
+      ],
+      "tests": [
+        "postgres_metrics::reviewed_incident_rate_differs_from_raw_volume",
+        "lib:application::operational_metrics::tests::repeat_markers_do_not_inflate_acquisition",
+        "api_reports::duplicate_filings_group_into_one_case"
       ]
     },
     "INV-43": {
@@ -2736,13 +3334,17 @@
         "P14-T03",
         "P14-T06"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "unit",
         "integration",
         "api",
         "concurrency",
         "privacy"
+      ],
+      "tests": [
+        "api_reputation::contact_alone_claims_no_verified_sale",
+        "api_reputation::profile_excludes_private_history"
       ]
     },
     "INV-44": {
@@ -2754,7 +3356,7 @@
         "P12-T03",
         "P18-T04"
       ],
-      "status": "planned",
+      "status": "implemented",
       "tiers": [
         "integration",
         "api",
@@ -2762,6 +3364,11 @@
         "concurrency",
         "unit",
         "ops"
+      ],
+      "tests": [
+        "api_account_deletion::buyer_and_seller_journeys_close_correctly",
+        "api_account_deletion::deleted_parties_cannot_disclose_or_mutate_with_old_cookie",
+        "postgres_retention::no_deleted_destination_readable"
       ]
     }
   },
@@ -2775,5 +3382,5 @@
     "e2e",
     "ops"
   ],
-  "version": 1
+  "version": 2
 }

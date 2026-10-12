@@ -45,11 +45,15 @@ usage() {
 }
 
 # Registered suites per tier. Extended by later cards as suites land.
+# P17-T01 reconciliation: api/integration/concurrency/privacy list every
+# matching suite so tiers re-run real coverage instead of placeholders.
 tier_targets() {
   case "$1" in
     unit) printf '%s\n' "bin" "configuration" "privacy_logging" "api_scaffold" ;;
-    api) printf '%s\n' "api_scaffold" ;;
-    privacy) printf '%s\n' "privacy_logging" ;;
+    api) printf '%s\n' "api_account_deletion" "api_accounts" "api_appeals" "api_auth_limits" "api_auth" "api_blocks" "api_contacts" "api_contract" "api_feedback" "api_identity_history" "api_lifecycle_journeys" "api_metrics" "api_moderation_accounts" "api_moderation" "api_notices" "api_offer_actions" "api_offer_edits" "api_offer_reads" "api_offers" "api_offer_withdrawal" "api_phone_change" "api_policy_changes" "api_profiles" "api_public_html" "api_public_requests" "api_recovery" "api_reports" "api_reputation" "api_request_outcomes" "api_request_removal" "api_request_renewal" "api_requests" "api_safety_journeys" "api_scaffold" "api_share_attribution" "api_sharing" "api_staff_auth" ;;
+    integration) printf '%s\n' "postgres_auth_limits" "postgres_blocks" "postgres_catalogs" "postgres_contact_limits" "postgres_contacts" "postgres_core" "postgres_discovery" "postgres_eligibility" "postgres_events" "postgres_expiry" "postgres_idempotency" "postgres_jobs" "postgres_metrics" "postgres_offer_cascades" "postgres_offer_limits" "postgres_offers" "postgres_outcome_prompts" "postgres_reports" "postgres_request_duplicates" "postgres_request_limits" "postgres_requests" "postgres_restoration" "postgres_retention" "postgres_transactions" "postgres_users" "deadline_requests" "request_revision" "retention_policy" ;;
+    concurrency) printf '%s\n' "concurrency_contacts" "concurrency_discovery" "concurrency_outcomes" "concurrency_reports" ;;
+    privacy) printf '%s\n' "privacy_logging" "privacy_surfaces" "provider_verification" ;;
     web) printf '%s\n' "web-component" ;;
     e2e) printf '%s\n' "e2e-suite" ;;
     *) return 1 ;;
@@ -95,8 +99,8 @@ if [ "$TIER" = "all" ]; then
       TARGETS+=("$tier:$target")
     done < <(tier_targets "$tier")
   done
-  echo "test.sh: pending tiers without registered suites: integration concurrency ops critical-mutations load"
-  echo "test.sh: tier 'web' runs separately (node toolchain); tier 'e2e' needs a live disposable stack"
+  echo "test.sh: pending tiers without registered suites: ops critical-mutations load"
+  echo "test.sh: tier 'web' runs separately (node toolchain); tiers 'integration', 'concurrency' and 'e2e' need a live disposable stack"
   echo "test.sh: running cargo tiers for 'all'; invoking web tier next"
   run_web_tier
 elif [ "$TIER" = "web" ]; then

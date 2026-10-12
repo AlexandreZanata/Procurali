@@ -18,11 +18,29 @@ invoke these tiers from tracked files only — never from `.local/`.
 | critical-mutations | `./scripts/test.sh critical-mutations` | Fault-injection sensitivity probes in an isolated copy (P17) |
 | load | `./scripts/test.sh load` | Bounded load + correctness probes on an explicitly selected disposable/staging target |
 
-`./scripts/test.sh all` runs every registered tier (currently unit, api, privacy) and
-lists tiers without registered suites; explicitly requesting an unregistered tier,
+`./scripts/test.sh all` runs every registered tier (currently unit, api, privacy,
+web) and lists tiers without registered suites; explicitly requesting an unregistered tier,
 an unknown tier, an unknown task, or a task with no tests in the tier exits nonzero.
 Every target fails on zero discovered tests. `./scripts/check.sh fast` is the universal
 quick gate (format, Clippy deny-warnings, unit tier, private-file guard).
+
+Registered tier contents (P17-T01 reconciliation; every name is a
+`cargo test --test <target>` suite except `web`, which runs the
+component project):
+- unit: `bin`, `configuration`, `privacy_logging`, `api_scaffold`
+- api: all 41 `api_*` suites (routes, payloads, cookie auth, matrices)
+- integration: all 25 `postgres_*` suites plus `deadline_requests`,
+  `request_revision`, `retention_policy` (real PostgreSQL only)
+- concurrency: all 4 `concurrency_*` suites (barrier-coordinated races)
+- privacy: `privacy_logging`, `privacy_surfaces`, `provider_verification`
+- web: pinned install, `tsc --noEmit`, build, component project
+- e2e: Playwright e2e project against a real disposable stack
+  (serial workers; fresh database per verification run — session
+  lookup is a documented linear scan, so shared databases slow
+  authenticated round-trips)
+Pure-vector suites (`domain_vectors`, `deadline_vectors`,
+`liquidity_vectors`) stay directly runnable and join a tier with the
+final verification card.
 
 ## Adding tests (`--task` filtering and discovery)
 
@@ -60,12 +78,15 @@ their absence blocks only those gates and is recorded, never faked.
 
 ## Scenario registry
 
-`contracts/scenario-tests.json` (v1, generated 2026-10-08 from the traceability
-dispositions and task tiers): 132 scenarios — 47 mandatory AC, 35 mandatory EC,
-42 mandatory INV (all `planned`, none passing) plus 8 explicitly future-deferred —
-and the 14 mandatory race cases with their proving tasks. P17-T01 reconciles this
-registry against actually discovered tests and fails the gate if any mandatory ID
-lacks a real assertion.
+`contracts/scenario-tests.json` (v2, reconciled 2026-10-11 by P17-T01):
+132 scenarios — 50 AC (47 mandatory plus future AC-45/46/47), 38 EC
+(35 mandatory plus future paid EC-18/29/30), 44 INV (42 mandatory plus
+future INV-40/41) — every mandatory ID naming its real discovered
+assertions (`target::test`, `lib:module::test`, or `web:spec#title`),
+plus the 14 race cases with their proving tests. Future entries name
+only the standing guard test that forbids inventing the feature. Tiers
+above re-run them; a mandatory ID without a real assertion fails the
+gate.
 
 ## Continuous integration
 
