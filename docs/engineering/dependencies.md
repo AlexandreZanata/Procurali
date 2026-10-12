@@ -58,6 +58,31 @@ Image digests are not invented here. P02-T01 records the digest of the actually 
 image (`docker inspect`) alongside the tag in `infra/compose.yaml` comments.
 The core MVP runs correctly without Redis; Redis absence or failure changes nothing authoritative.
 
+## Release checks (P17-T05)
+
+`scripts/check-release.sh` gates exact lockfiles (`cargo fetch
+--locked`, `npm install --dry-run`), dependency advisories, licenses,
+and production configuration refusals; `scripts/check-secrets.sh`
+gates staged/tracked private paths, high-confidence secret material,
+and production-bypass markers (test-only fixtures allowlisted).
+`scripts/test.sh ops` stays unregistered until the infrastructure
+phase owns deployment targets.
+
+Known advisory exception (recorded, not hidden):
+[RUSTSEC-2023-0071](https://rustsec.org/advisories/RUSTSEC-2023-0071)
+(rsa 0.9.10, Marvin timing sidechannel, medium severity) has no fixed
+upgrade available. The release gate ignores exactly this ID and
+otherwise tolerates zero unassessed advisories: anything else fails
+loudly for human triage (record or repair). Revisit when an upgrade
+lands.
+
+License policy: strong copyleft (GPL/AGPL, including LGPL-only)
+without a permissive alternative fails the gate. The single
+`MIT OR Apache-2.0 OR LGPL-2.1-or-later` entry picks a permissive
+alternative and passes. Production configuration refusals (fake
+provider, non-HTTPS origin, short session key, test/prod database
+equality) re-run their suites inside the gate.
+
 ## Explicitly out of scope for this manifest
 
 Native mobile SDKs, payment processors, internal-chat infrastructure, map tiles,
