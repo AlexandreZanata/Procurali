@@ -1,0 +1,29 @@
+# Build context hygiene (P18-T01): the image carries the release binary,
+# the compiled web bundle, migrations, and the public contract only.
+# Everything else — planning state, secrets, toolchains, and evidence —
+# stays out of the context and therefore out of every layer.
+
+# Private planning, execution records, and test evidence.
+/.local/
+# Rust and Node build outputs (rebuilt inside their stages or prebuilt).
+target/
+**/target/
+node_modules/
+web/node_modules/
+# Browser test artifacts.
+web/test-results/
+# Playwright browser caches must never enter the context.
+.ms-playwright/
+# Local environment files (examples stay as documentation only).
+**/.env
+**/.env.*
+infra/env*
+!infra/env.deploy.example
+# Editor, OS, and coverage noise.
+.idea/
+.vscode/
+.DS_Store
+*.log
+coverage/
+# Git internals travel via the build revision label, not the context.
+.git/

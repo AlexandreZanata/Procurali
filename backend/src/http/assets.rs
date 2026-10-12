@@ -47,6 +47,10 @@ fn content_type(path: &str) -> &'static str {
         "text/css; charset=utf-8"
     } else if path.ends_with(".html") {
         "text/html; charset=utf-8"
+    } else if path.ends_with(".webmanifest") {
+        "application/manifest+json"
+    } else if path.ends_with(".svg") {
+        "image/svg+xml"
     } else {
         "application/octet-stream"
     }
@@ -118,6 +122,12 @@ mod tests {
         tokio::fs::write(dir.join("page.html"), "<main></main>\n")
             .await
             .expect("fixture html writes");
+        tokio::fs::write(dir.join("manifest.webmanifest"), "{\"name\":\"x\"}\n")
+            .await
+            .expect("fixture manifest writes");
+        tokio::fs::write(dir.join("icon.svg"), "<svg></svg>\n")
+            .await
+            .expect("fixture icon writes");
         dir
     }
 
@@ -192,6 +202,45 @@ mod tests {
                 .await
                 .expect("route responds");
             assert_eq!(refused.status(), StatusCode::NOT_FOUND);
+        }
+    }
+
+    #[tokio::test]
+    async fn manifest_and_icon_serve_typed_and_immutable() {
+        let dir = fixture_dir().await;
+        let app = routes(AssetsState::new(dir));
+        for (path, typed) in [
+            ("/assets/manifest.webmanifest", "application/manifest+json"),
+            ("/assets/icon.svg", "image/svg+xml"),
+        ] {
+            let response = app
+                .clone()
+                .oneshot(
+                    axum::http::Request::get(path)
+                        .body(Body::empty())
+                        .expect("request builds"),
+                )
+                .await
+                .expect("route responds");
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(
+                response
+                    .headers()
+                    .get(header::CONTENT_TYPE)
+                    .expect("typed")
+                    .to_str()
+                    .expect("ascii"),
+                typed
+            );
+            assert_eq!(
+                response
+                    .headers()
+                    .get(header::CACHE_CONTROL)
+                    .expect("cached")
+                    .to_str()
+                    .expect("ascii"),
+                "public, max-age=31536000, immutable"
+            );
         }
     }
 
