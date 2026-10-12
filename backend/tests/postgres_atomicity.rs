@@ -14,9 +14,7 @@ mod database;
 use database::TestDatabase;
 use procurali_backend::persistence::{
     events::{record as record_event, NewEvent},
-    transaction::{
-        run_serializable, AttemptError, TransactionError, MAX_TRANSACTION_ATTEMPTS,
-    },
+    transaction::{run_serializable, AttemptError, TransactionError, MAX_TRANSACTION_ATTEMPTS},
 };
 use serde_json::json;
 use std::sync::{
@@ -192,10 +190,7 @@ async fn uncommitted_writes_stay_invisible_until_commit() {
             (before, after)
         }
     };
-    let (writer_done, reader_done) = tokio::join!(
-        tokio::spawn(writer),
-        tokio::spawn(reader),
-    );
+    let (writer_done, reader_done) = tokio::join!(tokio::spawn(writer), tokio::spawn(reader),);
     writer_done.expect("writer joins");
     let (before, after) = reader_done.expect("reader joins");
     assert_eq!(before, 0, "no dirty read of the uncommitted row");

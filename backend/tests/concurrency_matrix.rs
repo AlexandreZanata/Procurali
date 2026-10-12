@@ -13,7 +13,9 @@ mod database;
 
 use database::TestDatabase;
 use procurali_backend::application::publish_request::publish_request;
-use procurali_backend::application::renew_request::{renew_request, RenewError, RenewalConfirmation};
+use procurali_backend::application::renew_request::{
+    renew_request, RenewError, RenewalConfirmation,
+};
 use procurali_backend::application::request_drafts::{create_draft, DraftInput};
 use procurali_backend::application::start_contact::{start_contact, ContactInput};
 use procurali_backend::application::submit_offer::{submit_offer, OfferInput};
@@ -172,11 +174,13 @@ async fn concurrent_renewal_creates_one_cycle() {
             renew_request(&pool, buyer, demand, confirmation("Renew Race Fridge")).await
         }
     };
-    let (first, second) =
-        tokio::join!(run(Arc::clone(&barrier)), run(Arc::clone(&barrier)),);
+    let (first, second) = tokio::join!(run(Arc::clone(&barrier)), run(Arc::clone(&barrier)),);
 
     // Exactly one winner: two cycles, one renewal fact, no storage fog.
-    let winners = [first.is_ok(), second.is_ok()].into_iter().filter(|w| *w).count();
+    let winners = [first.is_ok(), second.is_ok()]
+        .into_iter()
+        .filter(|w| *w)
+        .count();
     assert_eq!(winners, 1, "exactly one renewal wins");
     for loser in [first.err(), second.err()].into_iter().flatten() {
         assert!(
@@ -184,11 +188,12 @@ async fn concurrent_renewal_creates_one_cycle() {
             "loser refuses with a defined rule"
         );
     }
-    let cycles: i64 = sqlx::query_scalar("SELECT count(*) FROM request_cycles WHERE request_id = $1")
-        .bind(demand)
-        .fetch_one(db.pool())
-        .await
-        .expect("cycles read");
+    let cycles: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM request_cycles WHERE request_id = $1")
+            .bind(demand)
+            .fetch_one(db.pool())
+            .await
+            .expect("cycles read");
     assert_eq!(cycles, 2);
     assert_eq!(renewal_events(db.pool(), buyer).await, 1);
     db.cleanup().await.expect("suite cleans up");
@@ -293,7 +298,8 @@ async fn sequential_renewals_respect_open_slots() {
         .await
         .expect("disposable database allocates");
     assert!(
-        db.name().starts_with("procurali_test_p17t03_allowance_seq_"),
+        db.name()
+            .starts_with("procurali_test_p17t03_allowance_seq_"),
         "known suite identity in the database name"
     );
     seed_catalog(db.pool()).await;
@@ -341,7 +347,8 @@ async fn concurrent_renewals_stay_consistent() {
         .await
         .expect("disposable database allocates");
     assert!(
-        db.name().starts_with("procurali_test_p17t03_allowance_race_"),
+        db.name()
+            .starts_with("procurali_test_p17t03_allowance_race_"),
         "known suite identity in the database name"
     );
     seed_catalog(db.pool()).await;
@@ -368,10 +375,26 @@ async fn concurrent_renewals_stay_consistent() {
         }
     };
     let outcomes = tokio::join!(
-        run(Arc::clone(&barrier), "Allowance One".to_owned(), demands[0].1),
-        run(Arc::clone(&barrier), "Allowance Two".to_owned(), demands[1].1),
-        run(Arc::clone(&barrier), "Allowance Three".to_owned(), demands[2].1),
-        run(Arc::clone(&barrier), "Allowance Four".to_owned(), demands[3].1),
+        run(
+            Arc::clone(&barrier),
+            "Allowance One".to_owned(),
+            demands[0].1
+        ),
+        run(
+            Arc::clone(&barrier),
+            "Allowance Two".to_owned(),
+            demands[1].1
+        ),
+        run(
+            Arc::clone(&barrier),
+            "Allowance Three".to_owned(),
+            demands[2].1
+        ),
+        run(
+            Arc::clone(&barrier),
+            "Allowance Four".to_owned(),
+            demands[3].1
+        ),
     );
     let outcomes = [outcomes.0, outcomes.1, outcomes.2, outcomes.3];
     let winners = outcomes.iter().filter(|o| o.is_ok()).count();
