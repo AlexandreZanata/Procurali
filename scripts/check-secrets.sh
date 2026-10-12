@@ -55,7 +55,8 @@ run_scan() {
   check_pattern "live-secret-key" 'sk-live-[A-Za-z0-9]+'
   check_pattern "api-key-assignment" '(api[_-]?key|client[_-]?secret|auth[_-]?token)[[:space:]]*[:=][[:space:]]*['\''"][^'\''"]{12,}['\''"]'
   check_pattern "password-assignment" '[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd][[:space:]]*[:=][[:space:]]*['\''"][^'\''"]{8,}['\''"]'
-  check_pattern "production-bypass" 'X-Test-Bypass|bypass[_-]?auth|auth[_-]?bypass'
+  # Split literal: the pattern source must not match itself.
+  check_pattern "production-bypass" 'X-Test'"-"'Bypass|bypass[_-]?auth|auth[_-]?bypass'
   if [ "$failures" -ne 0 ]; then
     echo "check-secrets: FAILED ($failures group(s))" >&2
     return 1
@@ -85,10 +86,10 @@ EOF
   cat > "$tmp/evil-aws.txt" <<'EOF'
 aws_secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
 EOF
-  cat > "$tmp/evil-key.txt" <<'EOF'
------BEGIN RSA PRIVATE KEY-----
-MIIBOgIBAAJBAKcJbInV+iQ7eDk4rEvzbA7lKQ7Q3wIDAQAB
-EOF
+  # Split literal: the fixture file must trip the scanner while this
+  # source line must not match itself.
+  printf '%s%s\n' '-----BEGIN RSA PRIVATE' ' KEY-----' > "$tmp/evil-key.txt"
+  printf '%s\n' 'MIIBOgIBAAJBAKcJbInV+iQ7eDk4rEvzbA7lKQ7Q3wIDAQAB' >> "$tmp/evil-key.txt"
   local allow="test-only|example|fake|synthetic|changeme|0000+|xxxx+|not-a-secret|test-test"
   echo "self-test: clean fixture must pass"
   if grep -nE -I "password[[:space:]]*[:=][[:space:]]*['\"][^'\"]{8,}['\"]" "$tmp/clean.txt" 2>/dev/null | grep -vEi "$allow" | grep -q .; then
