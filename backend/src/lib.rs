@@ -221,6 +221,8 @@ pub mod http {
     pub mod requests;
     /// Router with explicit size/time bounds and stable errors.
     pub mod router;
+    /// Privacy response headers: no-store, nosniff, same-origin referrer.
+    pub mod security_headers;
     /// Share-intent routes: prepared messages without recipients.
     pub mod shares;
 }

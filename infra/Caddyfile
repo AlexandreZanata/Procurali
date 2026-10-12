@@ -1,0 +1,53 @@
+# HTTPS proxy (P18-T02): same-origin browser operation only.
+#
+# {$DOMAIN} serves the application over automatic HTTPS with HTTP
+# redirect; untrusted X-Forwarded-* headers from outside the trusted
+# proxy set are never honored (Caddy only trusts the loopback/private
+# ranges named below, so client-forged headers cannot fake the
+# backend's origin or auth-limit identity). Cookies keep backend-set
+# Secure/HttpOnly/SameSite attributes end to end; the proxy adds no
+# credentialed CORS and no wildcard access. Actual domain and contact
+# arrive with staging inputs (P18-T07); validate with
+# `docker run --rm -v $PWD/infra/Caddyfile:/etc/caddy/Caddyfile
+# caddy:2 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile`.
+
+{
+	admin off
+	http_port 80
+	https_port 443
+}
+
+{$DOMAIN} {
+	# Automatic HTTPS with default issuance; DNS and issuance contact
+	# monitoring land with staging inputs (P18-T07).
+
+	# Plain HTTP redirects to HTTPS; nothing is served insecurely.
+	@insecure {
+		protocol http
+	}
+	redir @insecure https://{host}{uri} permanent
+
+	# Single same-origin backend; no extra upstreams, no path rewrites
+	# that could smuggle prefixes past route matching.
+	reverse_proxy app:8080 {
+		trusted_proxies private_ranges
+
+		header_up Host {host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-For {remote_host}
+
+		# Private responses are never stored by shared caches; the
+		# backend also marks them no-store itself (defense in depth).
+		header_down -Server
+	}
+
+	# Small, explicit request limits at the edge.
+	request_body {
+		max_size 1MB
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

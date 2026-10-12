@@ -1,0 +1,127 @@
+# One-host deployment topology (P18-T02): proxy-only publishing.
+#
+# Project identity is explicit (`-p procurali-deploy-<suffix>`); the default
+# Compose project is never used. PostgreSQL and the application expose NO
+# host ports: only the proxy publishes 80/443. The database lives on an
+# internal-only network the proxy never joins. Resource, connection, and
+# log limits are bounded; no wildcard credentialed CORS exists anywhere
+# (the backend answers same-origin only). Actual domain, certificates,
+# and secrets arrive with staging inputs (P18-T07); this file carries
+# none. The application image serves traffic after the server-merge
+# follow-up; until then the app service starts the startup scaffold,
+# which refuses to serve without validated production settings.
+#
+# Required environment (see infra/env.deploy.example):
+#   APP_IMAGE, DOMAIN, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
+
+services:
+  db:
+    image: postgres:18.6@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
+    restart: unless-stopped
+    env_file:
+      # Short form: compose v2.27 silently drops the long path/required
+      # mapping. Missing files fail fast (deploy.sh pre-checks too).
+      - "${DEPLOY_ENV_FILE:-./env.deploy}"
+    environment:
+      PGDATA: /var/lib/postgresql/data/pgdata
+    # No ports: loopback and public interfaces alike stay closed.
+    expose:
+      - "5432"
+    volumes:
+      - procurali-deploy-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - procurali-backend
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1G
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  app:
+    image: ${APP_IMAGE:?APP_IMAGE is required (pinned tag or digest, never latest)}
+    restart: unless-stopped
+    env_file:
+      # Short form: compose v2.27 silently drops the long path/required
+      # mapping. Missing files fail fast (deploy.sh pre-checks too).
+      - "${DEPLOY_ENV_FILE:-./env.deploy}"
+    environment:
+      PROCURALI_ENV: production
+    # No ports: traffic enters through the proxy only.
+    expose:
+      - "8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - procurali-backend
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  proxy:
+    image: caddy:2@sha256:f2a1290d0463aad60660d4ec134943f183ee2a5f6c3eb7bf32dd984f2f020772
+    restart: unless-stopped
+    env_file:
+      # Short form: compose v2.27 silently drops the long path/required
+      # mapping. Carries DOMAIN for the site address.
+      - "${DEPLOY_ENV_FILE:-./env.deploy}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - procurali-deploy-caddy-data:/data
+      - procurali-deploy-caddy-config:/config
+    depends_on:
+      app:
+        condition: service_started
+    networks:
+      - procurali-frontend
+      - procurali-backend
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  procurali-frontend:
+    name: procurali-frontend-${DEPLOY_SUFFIX:-shared}
+    driver: bridge
+  procurali-backend:
+    name: procurali-backend-${DEPLOY_SUFFIX:-shared}
+    driver: bridge
+    internal: true
+
+volumes:
+  procurali-deploy-cargo-cache:
+    name: procurali-deploy-cargo-cache
+  procurali-deploy-pgdata:
+    name: procurali-deploy-pgdata-${DEPLOY_SUFFIX:-shared}
+  procurali-deploy-caddy-data:
+    name: procurali-deploy-caddy-data-${DEPLOY_SUFFIX:-shared}
+  procurali-deploy-caddy-config:
+    name: procurali-deploy-caddy-config-${DEPLOY_SUFFIX:-shared}
