@@ -39,7 +39,11 @@ check_pattern() {
   local label="$1"
   local pattern="$2"
   local hits
-  hits="$(scan_paths | tr '\n' '\0' | xargs -0 grep -nE -I "$pattern" 2>/dev/null | grep -vEi "$ALLOWLIST" || true)"
+  # Values starting with `$` are variable references (e.g.
+  # `PGPASSWORD="$POSTGRES_PASSWORD"`), never literal secrets; the
+  # residual risk (a literal starting with `$`) is documented and
+  # accepted. Test-only literals stay allowlisted separately.
+  hits="$(scan_paths | tr '\n' '\0' | xargs -0 grep -nE -I "$pattern" 2>/dev/null | grep -vEi "$ALLOWLIST" | grep -vE '[:=]["'\'']\$' || true)"
   if [ -n "$hits" ]; then
     report "$label material found:"
     printf '%s\n' "$hits" >&2
