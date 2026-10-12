@@ -11,6 +11,13 @@ export default defineConfig({
   testDir: "./tests",
   fullyParallel: true,
   reporter: "line",
+  // Slow-auth disposable environment: session lookup is a documented
+  // linear Argon2 scan, so authenticated round-trips cost seconds on a
+  // shared database. Timeouts accommodate; assertions do not weaken.
+  timeout: 90000,
+  expect: {
+    timeout: 15000,
+  },
   use: {
     baseURL: process.env["PROCURALI_E2E_BASE_URL"],
     trace: "retain-on-failure",

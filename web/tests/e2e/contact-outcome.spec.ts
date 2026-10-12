@@ -139,6 +139,9 @@ test("valid contact uses the current seller URL and records one initiation", asy
 });
 
 test("blocked, withdrawn, and stale offers never navigate to a destination", async ({ page, context }) => {
+  // Slow-auth environment (documented linear session scan on the
+  // disposable stack): more time, same assertions.
+  test.slow();
   const base = e2eBaseUrl();
   const seed = fixtures();
   expect(seed.retiring_demand).toBeDefined();
@@ -210,14 +213,17 @@ test("blocked, withdrawn, and stale offers never navigate to a destination", asy
   expect(outcome[0]).not.toContain(":sent");
   expect(outcome[1]).not.toContain(":sent");
 
-  // Withdrawn supply refuses over real auth for its own buyer.
+  // Withdrawn supply refuses over real auth for its own buyer. The
+  // handoff id is a valid UUID so the refusal comes from withdrawn
+  // state, not field shape.
   const refused = await postJson(
     base,
     `/api/v1/requests/${seed.retiring_demand ?? ""}/offers/${seed.withdrawn_offer ?? ""}/contact`,
-    { handoff_id: "e2e-withdrawn-1", expected_offer_terms: 1, entry_source: "offer_detail" },
+    { handoff_id: crypto.randomUUID(), expected_offer_terms: 1, entry_source: "offer_detail" },
     harnessCookie,
   );
   expect(refused.status).not.toBe(200);
+  expect(refused.status).not.toBe(201);
   expect(page.url().startsWith(base)).toBe(true);
 });
 
