@@ -40,7 +40,7 @@ run_e2e_tier() {
 cd "$BACKEND"
 
 usage() {
-  echo "usage: scripts/test.sh <unit|api|privacy|web|e2e|all> [--task TASK-ID]" >&2
+  echo "usage: scripts/test.sh <unit|api|privacy|web|e2e|critical-mutations|all> [--task TASK-ID]" >&2
   exit 2
 }
 
@@ -56,6 +56,7 @@ tier_targets() {
     privacy) printf '%s\n' "privacy_logging" "privacy_surfaces" "provider_verification" ;;
     web) printf '%s\n' "web-component" ;;
     e2e) printf '%s\n' "e2e-suite" ;;
+    critical-mutations) printf '%s\n' "critical-mutations-script" ;;
     *) return 1 ;;
   esac
 }
@@ -101,7 +102,7 @@ if [ "$TIER" = "all" ]; then
       TARGETS+=("$tier:$target")
     done < <(tier_targets "$tier")
   done
-  echo "test.sh: pending tiers without registered suites: ops critical-mutations load"
+  echo "test.sh: pending tiers without registered suites: ops load"
   echo "test.sh: tier 'web' runs separately (node toolchain); tiers 'integration', 'concurrency' and 'e2e' need a live disposable stack"
   echo "test.sh: running cargo tiers for 'all'; invoking web tier next"
   run_web_tier
@@ -120,6 +121,14 @@ elif [ "$TIER" = "e2e" ]; then
   fi
   run_e2e_tier
   echo "test.sh: e2e tier passed"
+  exit 0
+elif [ "$TIER" = "critical-mutations" ]; then
+  if [ -n "$TASK" ]; then
+    echo "test.sh: --task filtering is not supported for tier 'critical-mutations' yet (failing loudly)" >&2
+    exit 2
+  fi
+  "$REPO_ROOT/scripts/critical-mutations.sh"
+  echo "test.sh: critical-mutations tier passed"
   exit 0
 elif tier_targets "$TIER" >/dev/null; then
   if [ -n "$TASK" ]; then

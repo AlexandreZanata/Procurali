@@ -15,7 +15,7 @@ invoke these tiers from tracked files only — never from `.local/`.
 | web | `./scripts/test.sh web` | TS checks, component/unit behavior (no full-integration claim) |
 | e2e | `./scripts/test.sh e2e` | Playwright buyer/seller/staff journeys on a real disposable backend/database |
 | ops | `./scripts/test.sh ops` | Migration/restart/worker/config/backup-restore/deployment smoke on configured targets |
-| critical-mutations | `./scripts/test.sh critical-mutations` | Fault-injection sensitivity probes in an isolated copy (P17) |
+| critical-mutations | `./scripts/test.sh critical-mutations` | Fault-injection sensitivity probes in an isolated copy (P17): every guard in `contracts/critical-guards.json` must fail its named suites with the fault applied and pass without it; survivors fail the gate |
 | load | `./scripts/test.sh load` | Bounded load + correctness probes on an explicitly selected disposable/staging target |
 
 `./scripts/test.sh all` runs every registered tier (currently unit, api, privacy,

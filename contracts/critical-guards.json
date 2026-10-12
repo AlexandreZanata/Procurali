@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "note": "Sensitivity probes (P17-T04). Each mutant breaks exactly one production guard in a disposable source copy; the named suites must fail there and pass on the unmodified tree. A surviving mutant fails the gate and names its new-test obligation. Never applied to the working tree.",
+  "guards": [
+    {
+      "id": "budget-comparison",
+      "guard": "INV-19/AC-16: over-budget offers refuse",
+      "file": "backend/src/application/submit_offer.rs",
+      "search": "    if valid.price_cents > budget_cents {",
+      "replace": "    if false {  // MUTANT budget-comparison: over-budget check disabled",
+      "suites": [
+        "api_offers"
+      ],
+      "killed_by": "api_offers::incompatible_submissions_refuse_without_new_offer"
+    },
+    {
+      "id": "exact-expiry",
+      "guard": "INV-09/AC-10: the exact deadline instant refuses",
+      "file": "backend/src/application/request_eligibility.rs",
+      "search": "    now >= deadline",
+      "replace": "    now > deadline  // MUTANT exact-expiry: exact instant wrongly allowed",
+      "suites": [
+        "deadline_requests"
+      ],
+      "killed_by": "deadline_requests::eligibility_denies_the_exact_deadline_despite_recorded_state"
+    },
+    {
+      "id": "draft-owner",
+      "guard": "INV-01/INV-05: strangers cannot read foreign drafts (row scope plus re-check)",
+      "file": "backend/src/application/request_drafts.rs",
+      "patches": [
+        {
+          "search": "         FROM requests WHERE id = $1 AND author_id = $2 AND state = 'draft'",
+          "replace": "         FROM requests WHERE id = $1 AND state = 'draft'"
+        },
+        {
+          "search": "    if stored.author_id != author_id || stored.state != \"draft\" {",
+          "replace": "    if stored.state != \"draft\" {  // MUTANT draft-owner: re-check dropped"
+        }
+      ],
+      "suites": [
+        "api_requests"
+      ],
+      "killed_by": "api_requests::stranger_and_anonymous_cannot_read_or_mutate"
+    },
+    {
+      "id": "duplicate-contact",
+      "guard": "INV-34/AC-23: retried handoff identity returns its row, never a second",
+      "file": "backend/src/persistence/contacts.rs",
+      "search": "    if let Some(row) = retried {",
+      "replace": "    if false {  // MUTANT duplicate-contact: replay lookup skipped",
+      "suites": [
+        "postgres_contacts",
+        "api_contacts"
+      ],
+      "killed_by": "postgres_contacts::same_retry_records_one_unique_contact"
+    },
+    {
+      "id": "blocked-contact",
+      "guard": "INV-28/INV-35: blocked pairs cannot shake hands",
+      "file": "backend/src/application/start_contact.rs",
+      "search": "    if blocked_either_direction(&mut *tx, buyer_id, seller_id)\n        .await\n        .map_err(|_| ContactError::StorageFailed)?\n    {",
+      "replace": "    if false {\n        // MUTANT blocked-contact: block check disabled",
+      "suites": [
+        "concurrency_contacts"
+      ],
+      "killed_by": "concurrency_contacts::block_winning_contact_race_yields_no_destination"
+    },
+    {
+      "id": "open-slots",
+      "guard": "AC-06: a fourth open request refuses",
+      "file": "backend/src/application/request_limits.rs",
+      "search": "    if open_request_count(tx, author_id, now).await? >= MAX_OPEN_REQUESTS {",
+      "replace": "    if open_request_count(tx, author_id, now).await? > MAX_OPEN_REQUESTS {  // MUTANT open-slots: off-by-one",
+      "suites": [
+        "postgres_request_limits"
+      ],
+      "killed_by": "postgres_request_limits::fourth_open_request_is_refused_while_ended_rows_free_slots"
+    }
+  ]
+}
