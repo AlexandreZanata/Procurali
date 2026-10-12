@@ -39,7 +39,20 @@ if [ -z "${TEST_DATABASE_URL:-}" ]; then
   echo "ci.sh: TEST_DATABASE_URL is required for the integration tier (no silent skip)" >&2
   exit 1
 fi
-cargo test --test postgres_core
+"$REPO_ROOT/scripts/test.sh" integration
+
+echo "ci.sh: concurrency tier (real PostgreSQL, disposable database)"
+"$REPO_ROOT/scripts/test.sh" concurrency
+
+echo "ci.sh: web tier (pinned toolchain, no backend)"
+"$REPO_ROOT/scripts/test.sh" web
+
+echo "ci.sh: critical-mutations tier (isolated worktree probes)"
+"$REPO_ROOT/scripts/test.sh" critical-mutations
+
+echo "ci.sh: release gate (lockfiles, advisories, licenses, secrets, prod config)"
+"$REPO_ROOT/scripts/check-release.sh"
+"$REPO_ROOT/scripts/check-secrets.sh"
 
 echo "ci.sh: private-path guard"
 "$REPO_ROOT/scripts/check-private-paths.sh"

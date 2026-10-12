@@ -50,14 +50,16 @@ jobs:
           rustup default stable
           rustc --version
           cargo --version
+          node --version
+
+      - name: Install the Playwright shell browser for the web tier
+        run: |
+          cd web
+          npm ci --no-audit --no-fund
+          npx playwright install --only-shell chromium
 
       - name: Run the tracked CI entry point
         run: ./scripts/ci.sh
-        env:
-          TEST_DATABASE_URL: postgresql://procurali_test:procurali-test-only-not-a-secret@localhost:5432/procurali_test_bootstrap
-
-      - name: Run the tracked release gate (lockfiles, advisories, licenses, secrets, prod config)
-        run: ./scripts/check-release.sh && ./scripts/check-secrets.sh
         env:
           TEST_DATABASE_URL: postgresql://procurali_test:procurali-test-only-not-a-secret@localhost:5432/procurali_test_bootstrap
 

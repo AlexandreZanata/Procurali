@@ -90,15 +90,21 @@ gate.
 
 ## Continuous integration
 
-`.github/workflows/verify.yml` runs `./scripts/ci.sh` on pushes to the
-construction branch and pull requests to `main`: pinned `actions/checkout@v4`,
-stable Rust via `rustup` (matching `backend/rust-toolchain.toml`), then locked
-fetch/build, `fmt --check`, `clippy --all-targets -- -D warnings`, the registered
-unit/api/privacy tiers, the integration tier against a real PostgreSQL service,
-and the private-path guard. The workflow reads tracked files only (it fails if
-any `.local/` path is tracked or present) and uploads no
-artifacts; logs stay secret-free by construction. The database service uses the
-same pinned `postgres:18.6` image+digest as local stacks, with a synthetic
-test-only password and an explicit disposable `TEST_DATABASE_URL`; a missing or
-unreachable database fails the run instead of skipping. Later phases extend
-`ci.sh` with the concurrency tier.
+`.github/workflows/verify.yml` runs `./scripts/ci.sh` on pushes to `main`
+and pull requests to `main`: pinned `actions/checkout@v4`, stable Rust
+via `rustup` (matching `backend/rust-toolchain.toml`), system Node with
+the Playwright shell browser, then locked fetch/build, `fmt --check`,
+`clippy --all-targets -- -D warnings`, the registered unit/api/privacy
+tiers, the full integration and concurrency tiers against a real
+PostgreSQL service, the web tier, the critical-mutations tier, the
+release gate (lockfiles, advisories, licenses, secrets, production
+config refusals), and the private-path guard. The workflow reads
+tracked files only (it fails if any `.local/` path is tracked or
+present) and uploads no artifacts; logs stay secret-free by
+construction. The database service uses the same pinned
+`postgres:18.6` image+digest as local stacks, with a synthetic
+test-only password and an explicit disposable `TEST_DATABASE_URL`; a
+missing or unreachable database fails the run instead of skipping.
+The e2e tier stays out of `ci.sh`: it needs an orchestrated
+disposable stack with a serving binary (a recorded follow-up), so
+clean-checkout proofs run it explicitly with the batch harness.
