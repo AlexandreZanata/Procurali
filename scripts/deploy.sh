@@ -156,7 +156,10 @@ fi
 
 echo "deploy: starting app/proxy pinned to $IMAGE"
 COMPOSE="docker compose -f infra/compose.deploy.yaml -p procurali-deploy-$SUFFIX --env-file $ENV_FILE"
-$COMPOSE up -d db app proxy
+# Force recreation: env-file content changes do not invalidate the
+# cached container config, so a plain `up` could keep running stale
+# settings (or none at all). The database is never recreated here.
+$COMPOSE up -d --force-recreate app proxy
 echo "deploy: asserting steady state publishes no database ports"
 if [ -n "$(docker port "procurali-deploy-$SUFFIX-db-1" 2>/dev/null || true)" ]; then
   echo "deploy: database container publishes host ports in steady state" >&2
