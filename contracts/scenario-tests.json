@@ -74,7 +74,8 @@
       "scenario": "Offer withdrawal or revision races with contact initiation.",
       "status": "implemented",
       "tests": [
-        "concurrency_contacts::open_withdrawal_contact_race_converges"
+        "concurrency_contacts::open_withdrawal_contact_race_converges",
+        "concurrency_matrix::withdraw_contact_resubmit_triple_race_converges"
       ]
     },
     {
@@ -180,6 +181,19 @@
       "tests": [
         "concurrency_contacts::phone_change_retry_keeps_single_history",
         "api_identity_history::new_handoff_uses_new_destination_prior_terms_intact"
+      ]
+    },
+    {
+      "id": "race-renewal-allowance",
+      "proving_tasks": [
+        "P17-T03"
+      ],
+      "scenario": "Concurrent renewals contend for open slots and the activation allowance; sequential renewals refuse past three open slots.",
+      "status": "implemented",
+      "tests": [
+        "concurrency_matrix::concurrent_renewal_creates_one_cycle",
+        "concurrency_matrix::sequential_renewals_respect_open_slots",
+        "concurrency_matrix::concurrent_renewals_stay_consistent"
       ]
     }
   ],
@@ -1970,7 +1984,10 @@
       "tests": [
         "postgres_contacts::same_retry_records_one_unique_contact",
         "concurrency_outcomes::duplicate_final_answers_converge_on_one_outcome",
-        "postgres_idempotency::concurrent_duplicate_actions_create_one_fact"
+        "postgres_idempotency::concurrent_duplicate_actions_create_one_fact",
+        "postgres_atomicity::exhausted_serialization_retries_commit_nothing",
+        "postgres_atomicity::post_event_failure_retries_to_exactly_one_fact_set",
+        "postgres_atomicity::uncommitted_writes_stay_invisible_until_commit"
       ]
     },
     "EC-26": {
@@ -3126,7 +3143,9 @@
       "tests": [
         "postgres_idempotency::concurrent_duplicate_actions_create_one_fact",
         "postgres_contacts::identical_action_identities_create_one_unique_contact",
-        "api_request_removal::repeated_remove_converges_and_strangers_remove_nothing"
+        "api_request_removal::repeated_remove_converges_and_strangers_remove_nothing",
+        "postgres_atomicity::exhausted_serialization_retries_commit_nothing",
+        "postgres_atomicity::post_event_failure_retries_to_exactly_one_fact_set"
       ]
     },
     "INV-35": {
