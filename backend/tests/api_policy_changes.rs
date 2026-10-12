@@ -400,7 +400,11 @@ async fn prohibition_winning_contact_race_reveals_nothing() {
                 .expect("contacts read");
             assert_eq!(rows, 1);
         }
-        Err(ContactError::ForbiddenState) => {
+        Err(ContactError::ForbiddenState) | Err(ContactError::ProhibitedCategory) => {
+            // Either losing branch refuses with a named error and records
+            // no contact and no destination: the category flip lands
+            // either before visibility flips (ForbiddenState) or at the
+            // category check itself (ProhibitedCategory, P08-T02).
             let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM contacts WHERE offer_id = $1")
                 .bind(offer)
                 .fetch_one(db.pool())
