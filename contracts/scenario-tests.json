@@ -662,7 +662,8 @@
       ],
       "tests": [
         "api_offers::valid_used_offer_matches_used_demand",
-        "api_offers::buyer_phone_is_absent_from_seller_submission_response"
+        "api_offers::buyer_phone_is_absent_from_seller_submission_response",
+        "api_lifecycle_journeys::withdrawal_and_terms_edit_close_the_loop"
       ]
     },
     "AC-15": {
@@ -773,7 +774,9 @@
       "tests": [
         "api_offer_reads::sellers_only_see_their_own_offers",
         "api_offer_reads::unrelated_buyers_and_anonymous_read_nothing_private",
-        "web:tests/e2e/offers.spec.ts#two sellers cannot read each other private terms"
+        "web:tests/e2e/offers.spec.ts#two sellers cannot read each other private terms",
+        "api_lifecycle_journeys::two_seller_comparison_contact_and_declared_completion",
+        "web:tests/e2e/full-journey.spec.ts#mandatory loop: two offers, private comparison, two contacts, no sale step"
       ]
     },
     "AC-20": {
@@ -823,7 +826,9 @@
       "tests": [
         "api_contacts::valid_buyer_contact_succeeds_while_others_refuse",
         "api_contacts::preparation::contextual_message_carries_current_terms",
-        "web:tests/e2e/contact-outcome.spec.ts#valid contact uses the current seller URL and records one initiation"
+        "web:tests/e2e/contact-outcome.spec.ts#valid contact uses the current seller URL and records one initiation",
+        "api_lifecycle_journeys::two_seller_comparison_contact_and_declared_completion",
+        "web:tests/e2e/full-journey.spec.ts#mandatory loop: two offers, private comparison, two contacts, no sale step"
       ]
     },
     "AC-22": {
@@ -986,7 +991,8 @@
       ],
       "tests": [
         "api_lifecycle_journeys::completed_journey_reconciles_end_to_end",
-        "api_request_outcomes::completion_without_offers_credits_no_seller"
+        "api_request_outcomes::completion_without_offers_credits_no_seller",
+        "api_lifecycle_journeys::two_seller_comparison_contact_and_declared_completion"
       ]
     },
     "AC-29": {
@@ -1158,7 +1164,9 @@
       "tests": [
         "api_blocks::blocking_after_contact_stops_handoffs_preserves_prior",
         "postgres_blocks::either_direction_prevents_new_pair_interaction",
-        "web:tests/e2e/safety.spec.ts#block stops contact, unblock restores, withdrawn stays reportable"
+        "web:tests/e2e/safety.spec.ts#block stops contact, unblock restores, withdrawn stays reportable",
+        "api_lifecycle_journeys::safety_report_block_suspend_delete_and_policy_change",
+        "web:tests/e2e/full-journey.spec.ts#safety alternatives refuse over HTTP without leaking destinations"
       ]
     },
     "AC-36": {
@@ -1276,7 +1284,8 @@
       "tests": [
         "api_account_deletion::buyer_and_seller_journeys_close_correctly",
         "api_account_deletion::deleted_parties_cannot_disclose_or_mutate_with_old_cookie",
-        "postgres_retention::no_deleted_destination_readable"
+        "postgres_retention::no_deleted_destination_readable",
+        "api_lifecycle_journeys::safety_report_block_suspend_delete_and_policy_change"
       ]
     },
     "AC-41": {
@@ -1345,7 +1354,8 @@
       "tests": [
         "api_policy_changes::paid_professional_no_prohibition_exception",
         "api_policy_changes::prohibition_winning_contact_race_reveals_nothing",
-        "api_policy_changes::threshold_change_prospective_history_traceable"
+        "api_policy_changes::threshold_change_prospective_history_traceable",
+        "api_lifecycle_journeys::safety_report_block_suspend_delete_and_policy_change"
       ]
     },
     "AC-44": {
@@ -1423,7 +1433,8 @@
         "concurrency"
       ],
       "tests": [
-        "postgres_metrics::one_request_two_contacts_north_star_two"
+        "postgres_metrics::one_request_two_contacts_north_star_two",
+        "api_lifecycle_journeys::two_seller_comparison_contact_and_declared_completion"
       ]
     },
     "AC-49": {
@@ -1451,7 +1462,8 @@
       "tests": [
         "postgres_expiry::suspended_expired_stays_hidden_and_becomes_expired",
         "api_moderation::deadline_runs_and_expiry_stays_hidden",
-        "api_moderation_accounts::restore_after_expiry_never_revives_offer"
+        "api_moderation_accounts::restore_after_expiry_never_revives_offer",
+        "api_lifecycle_journeys::expiry_then_renewal_starts_fresh_cycle"
       ]
     },
     "AC-50": {
@@ -1475,7 +1487,8 @@
       ],
       "tests": [
         "api_policy_changes::threshold_change_prospective_history_traceable",
-        "api_metrics::policy_change_and_correction_differ_independently"
+        "api_metrics::policy_change_and_correction_differ_independently",
+        "api_lifecycle_journeys::safety_report_block_suspend_delete_and_policy_change"
       ]
     },
     "EC-01": {
