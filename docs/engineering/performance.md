@@ -44,3 +44,12 @@ tiers re-run).
 No throughput promise beyond this host and mix; no staging/production
 capacity statement; live provider, staging host, and off-host restore
 remain pending owner inputs (see `release-status.md`).
+
+## Redis scope (P20 deferred)
+
+The bounded mix above is the baseline evidence for the optional Redis
+phase: latency is dominated by session hashing (explicitly outside cache
+authority), and no cacheable, non-sensitive, non-authoritative hotspot
+was measured. The optional phase is therefore deferred with no
+implementation; see [DEC-0005](decisions/DEC-0005-redis.md) for the
+candidate analysis and re-entry criteria.
