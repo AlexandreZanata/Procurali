@@ -178,7 +178,7 @@ async fn restriction_first_disables_handoff() {
 
     // Declared order one: every restriction lands before the handoff, so
     // each attempt refuses with its defined error and records nothing.
-    let withdrawn = demand_with_offer(db.pool(), author, seller).await;
+    let withdrawn = demand_with_offer(db.pool(), author, seller, "Withdrawn Fridge").await;
     withdraw_offer(db.pool(), seller, withdrawn.1, WithdrawReason::Withdrawn)
         .await
         .expect("fixture withdrawal withdraws");
@@ -188,7 +188,7 @@ async fn restriction_first_disables_handoff() {
     );
     assert_eq!(contact_rows(db.pool(), withdrawn.1).await, 0);
 
-    let blocked = demand_with_offer(db.pool(), author, seller).await;
+    let blocked = demand_with_offer(db.pool(), author, seller, "Blocked Fridge").await;
     sqlx::query("INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)")
         .bind(author)
         .bind(seller)
@@ -207,7 +207,7 @@ async fn restriction_first_disables_handoff() {
         .await
         .expect("synthetic unblock applies");
 
-    let suspended = demand_with_offer(db.pool(), author, seller).await;
+    let suspended = demand_with_offer(db.pool(), author, seller, "Suspended Fridge").await;
     sqlx::query("UPDATE users SET state = 'suspended' WHERE id = $1")
         .bind(seller)
         .execute(db.pool())
@@ -224,7 +224,7 @@ async fn restriction_first_disables_handoff() {
         .await
         .expect("synthetic restoration applies");
 
-    let elapsed = demand_with_offer(db.pool(), author, seller).await;
+    let elapsed = demand_with_offer(db.pool(), author, seller, "Elapsed Fridge").await;
     backdate_cycle(db.pool(), elapsed.0).await;
     assert_eq!(
         start_handoff(db.pool(), author, elapsed.0, elapsed.1).await,
@@ -232,7 +232,7 @@ async fn restriction_first_disables_handoff() {
     );
     assert_eq!(contact_rows(db.pool(), elapsed.1).await, 0);
 
-    let revised = demand_with_offer(db.pool(), author, seller).await;
+    let revised = demand_with_offer(db.pool(), author, seller, "Revised Fridge").await;
     revise_material(db.pool(), author, revised.0).await;
     assert_eq!(
         start_handoff(db.pool(), author, revised.0, revised.1).await,
@@ -240,7 +240,7 @@ async fn restriction_first_disables_handoff() {
     );
     assert_eq!(contact_rows(db.pool(), revised.1).await, 0);
 
-    let elapsed = demand_with_offer(db.pool(), author, seller).await;
+    let elapsed = demand_with_offer(db.pool(), author, seller, "Elapsed Again Fridge").await;
     backdate_cycle(db.pool(), elapsed.0).await;
     assert_eq!(
         start_handoff(db.pool(), author, elapsed.0, elapsed.1).await,
@@ -262,7 +262,7 @@ async fn contact_first_preserves_valid_initiation() {
     seed_catalog(db.pool()).await;
     let author = seed_active(db.pool(), "Winner Owner", "+55 11 90000-0403").await;
     let seller = seed_active(db.pool(), "Winner Seller", "+55 11 90000-0404").await;
-    let (request_id, offer_id) = demand_with_offer(db.pool(), author, seller).await;
+    let (request_id, offer_id) = demand_with_offer(db.pool(), author, seller, "Race Fridge").await;
 
     // Declared order two: the handoff commits first, so the row stands with
     // its frozen snapshot; the later withdrawal ends the offer without
@@ -302,7 +302,8 @@ async fn open_withdrawal_contact_race_converges() {
     seed_catalog(db.pool()).await;
     let author = seed_active(db.pool(), "Open Owner", "+55 11 90000-0405").await;
     let seller = seed_active(db.pool(), "Open Seller", "+55 11 90000-0406").await;
-    let (request_id, offer_id) = demand_with_offer(db.pool(), author, seller).await;
+    let (request_id, offer_id) =
+        demand_with_offer(db.pool(), author, seller, "Replay Fridge").await;
 
     // True concurrency with no ordering tricks: whichever path wins, the
     // end state is exact — a standing contact with the pre-race snapshot
@@ -371,7 +372,7 @@ async fn stale_deadline_and_retry_policy_have_defined_errors() {
     seed_catalog(db.pool()).await;
     let author = seed_active(db.pool(), "Policy Owner", "+55 11 90000-0407").await;
     let seller = seed_active(db.pool(), "Policy Seller", "+55 11 90000-0408").await;
-    let (request_id, _) = demand_with_offer(db.pool(), author, seller).await;
+    let (request_id, _) = demand_with_offer(db.pool(), author, seller, "Matrix Fridge").await;
 
     // Deadline equality is already expired: the check at the exact instant
     // refuses without depending on any background job.
@@ -437,8 +438,9 @@ async fn demand_with_offer(
     pool: &sqlx::PgPool,
     author: uuid::Uuid,
     seller: uuid::Uuid,
+    title: &str,
 ) -> (uuid::Uuid, uuid::Uuid) {
-    let request_id = publish_open(pool, author, "Refrigerator").await;
+    let request_id = publish_open(pool, author, title).await;
     let offer_id = submit_open(pool, seller, request_id).await;
     (request_id, offer_id)
 }
@@ -490,7 +492,8 @@ async fn block_winning_contact_race_yields_no_destination() {
     seed_catalog(db.pool()).await;
     let author = seed_active(db.pool(), "Race Owner", "+55 11 90000-0701").await;
     let seller = seed_active(db.pool(), "Race Seller", "+55 11 90000-0702").await;
-    let (request_id, offer_id) = demand_with_offer(db.pool(), author, seller).await;
+    let (request_id, offer_id) =
+        demand_with_offer(db.pool(), author, seller, "Cascade Fridge").await;
 
     // Blocking races with contact initiation through the P10 writers: the
     // barrier releases both at once, and the end state is exact in every
@@ -575,7 +578,8 @@ async fn phone_change_retry_keeps_single_history() {
     seed_catalog(db.pool()).await;
     let author = seed_active(db.pool(), "Race Owner", "+55 11 90000-1913").await;
     let seller = seed_active(db.pool(), "Race Seller", "+55 11 90000-1911").await;
-    let (request_id, offer_id) = demand_with_offer(db.pool(), author, seller).await;
+    let (request_id, offer_id) =
+        demand_with_offer(db.pool(), author, seller, "Retention Fridge").await;
     start_handoff(db.pool(), author, request_id, offer_id)
         .await
         .expect("fixture handoff starts");

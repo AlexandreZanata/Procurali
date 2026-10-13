@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "purpose": "Bounded load + correctness mix for scripts/load-test.sh: synthetic discovery/publication/offering/contact workload with restriction, expiry, and idempotency exercised during load. Never sends real verification or WhatsApp messages (deterministic fake provider, disposable database).",
+  "mix": {
+    "buyers": 4,
+    "sellers_per_buyer": 3,
+    "demands_per_buyer": 1,
+    "parallelism": 8,
+    "duration_cap_secs": 600
+  },
+  "quotas_respected": {
+    "note": "Stays inside free-plan allowances so load successes are 2xx: at most 3 open demands and 6 activations per buyer, at most 10 offer submissions per seller.",
+    "max_open_demands_per_buyer": 3,
+    "max_activations_per_buyer": 6,
+    "max_submissions_per_seller": 10
+  },
+  "correctness_probes": [
+    "duplicate_handoff_replays_one_contact",
+    "expired_demand_refuses_offers_and_contact",
+    "duplicate_intent_refuses_without_infrastructure_failure"
+  ],
+  "pass_predicate": {
+    "infrastructure_failures_allowed": 0,
+    "note": "HTTP 5xx, network errors, and timeouts fail the run. Expected business refusals (duplicate, expired, quota) must carry non-5xx codes and are tallied separately. No duplicate contact rows, no leaked destination outside buyer handoffs, no quota overflow."
+  }
+}

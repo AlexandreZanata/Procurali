@@ -137,11 +137,22 @@ async fn live_offer(
     author: uuid::Uuid,
     seller: uuid::Uuid,
 ) -> (uuid::Uuid, uuid::Uuid) {
+    live_offer_titled(pool, author, seller, "Refrigerator").await
+}
+
+/// Same as [`live_offer`] with an explicit title: exact duplicates refuse
+/// at publication, so independent fixtures need distinct titles.
+async fn live_offer_titled(
+    pool: &sqlx::PgPool,
+    author: uuid::Uuid,
+    seller: uuid::Uuid,
+    title: &str,
+) -> (uuid::Uuid, uuid::Uuid) {
     let draft = create_draft(
         pool,
         author,
         DraftInput {
-            title: Some("Refrigerator".to_owned()),
+            title: Some(title.to_owned()),
             category_code: Some("home_appliances".to_owned()),
             budget: Some("600.00".to_owned()),
             condition: Some("either".to_owned()),
@@ -419,7 +430,7 @@ async fn terminal_offers_are_not_resurrected() {
         restore_content(db.pool(), moderator, restore_input("offer", offer)).await,
         Err(RestoreContentError::InvalidState)
     );
-    let (_, offer_two) = live_offer(db.pool(), buyer, seller).await;
+    let (_, offer_two) = live_offer_titled(db.pool(), buyer, seller, "Second Fridge").await;
     block_user(db.pool(), buyer, seller)
         .await
         .expect("pair blocks");

@@ -85,11 +85,17 @@ fn confirmation() -> RenewalConfirmation {
 
 /// One genuinely open request through the real draft and publication paths.
 async fn publish_open(pool: &sqlx::PgPool, author: uuid::Uuid) -> uuid::Uuid {
+    publish_open_titled(pool, author, "Refrigerator").await
+}
+
+/// Same as [`publish_open`] with an explicit title: exact duplicates refuse
+/// at publication, so a second open demand needs a distinct title.
+async fn publish_open_titled(pool: &sqlx::PgPool, author: uuid::Uuid, title: &str) -> uuid::Uuid {
     let draft = create_draft(
         pool,
         author,
         DraftInput {
-            title: Some("Refrigerator".to_owned()),
+            title: Some(title.to_owned()),
             category_code: Some("home_appliances".to_owned()),
             budget: Some("520.00".to_owned()),
             condition: Some("either".to_owned()),
@@ -241,7 +247,9 @@ async fn valid_renewal_increments_cycle_and_activation_once() {
     assert_eq!(event_count(db.pool(), author, "request.renewed").await, 1);
 
     // An active row inside its final day renews without waiting for expiry.
-    let second = publish_open(db.pool(), author).await;
+    // The second demand carries a distinct title: exact duplicates refuse
+    // at publication, and this test is about renewal timing, not copies.
+    let second = publish_open_titled(db.pool(), author, "Microwave oven").await;
     let now = chrono::Utc::now();
     sqlx::query(
         "UPDATE request_cycles SET started_at = $2, deadline = $3
@@ -253,9 +261,17 @@ async fn valid_renewal_increments_cycle_and_activation_once() {
     .execute(db.pool())
     .await
     .expect("synthetic final day applies");
-    let renewed = renew_request(db.pool(), author, second, confirmation())
-        .await
-        .expect("final-day renewal renews");
+    let renewed = renew_request(
+        db.pool(),
+        author,
+        second,
+        RenewalConfirmation {
+            title: "Microwave oven".to_owned(),
+            ..confirmation()
+        },
+    )
+    .await
+    .expect("final-day renewal renews");
     assert_eq!(renewed.cycle_number, 2);
     db.cleanup().await.expect("suite cleans up");
 }

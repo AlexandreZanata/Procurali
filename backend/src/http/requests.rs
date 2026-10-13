@@ -248,6 +248,9 @@ fn publish_error(error: PublishError) -> Response {
         PublishError::ForbiddenState => {
             ApiError::new(Code::ForbiddenState, "request cannot be published").into_response()
         }
+        PublishError::DuplicateIntent => {
+            ApiError::new(Code::DuplicateIntent, "duplicate open demand exists").into_response()
+        }
         PublishError::StorageFailed => ApiError::internal().into_response(),
     }
 }

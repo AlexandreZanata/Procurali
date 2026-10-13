@@ -184,12 +184,23 @@ async fn live_demand(
     buyer_cookie: &str,
     seller_cookie: &str,
 ) -> (String, String) {
+    live_demand_titled(app, buyer_cookie, seller_cookie, "Refrigerator").await
+}
+
+/// Same as [`live_demand`] with an explicit title: exact duplicates refuse
+/// at publication, so independent fixtures need distinct titles.
+async fn live_demand_titled(
+    app: &axum::Router,
+    buyer_cookie: &str,
+    seller_cookie: &str,
+    title: &str,
+) -> (String, String) {
     let (status, draft) = call(
         app.clone(),
         "POST",
         "/api/v1/requests/drafts",
         Some(json!({
-            "title": "Refrigerator",
+            "title": title,
             "category_code": "home_appliances",
             "budget": "600.00",
             "condition": "either",
@@ -359,7 +370,8 @@ async fn unblock_keeps_old_offer_dead_and_new_cycle_possible() {
     assert_eq!(status, StatusCode::CONFLICT);
     assert_no_destination(&refused);
 
-    let (fresh_demand, fresh_offer) = live_demand(&app, &buyer_cookie, &seller_cookie).await;
+    let (fresh_demand, fresh_offer) =
+        live_demand_titled(&app, &buyer_cookie, &seller_cookie, "Washing Machine").await;
     let (status, fresh) = post_handoff(
         &app,
         &fresh_demand,

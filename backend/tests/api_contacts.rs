@@ -174,12 +174,18 @@ async fn seed_catalog(pool: &sqlx::PgPool) {
 
 /// Publish one either/600 demand through the real routes; return id.
 async fn publish_demand(app: &axum::Router, cookie: &str) -> String {
+    publish_demand_titled(app, cookie, "Refrigerator").await
+}
+
+/// Same as [`publish_demand`] with an explicit title: exact duplicates
+/// refuse at publication, so independent fixtures need distinct titles.
+async fn publish_demand_titled(app: &axum::Router, cookie: &str, title: &str) -> String {
     let (status, draft) = call(
         app.clone(),
         "POST",
         "/api/v1/requests/drafts",
         Some(json!({
-            "title": "Refrigerator",
+            "title": title,
             "category_code": "home_appliances",
             "budget": "600.00",
             "condition": "either",
@@ -372,9 +378,15 @@ async fn refusals_carry_no_destination() {
         db.name().starts_with("procurali_test_p08t02_refusals_"),
         "known suite identity in the database name"
     );
-    // One demand per terminal condition keeps fixtures independent.
-    async fn demand_with_offer(app: &axum::Router, buyer: &str, seller: &str) -> (String, String) {
-        let demand = publish_demand(app, buyer).await;
+    // One demand per terminal condition keeps fixtures independent; titles
+    // stay distinct because exact duplicates refuse at publication.
+    async fn demand_with_offer(
+        app: &axum::Router,
+        buyer: &str,
+        seller: &str,
+        title: &str,
+    ) -> (String, String) {
+        let demand = publish_demand_titled(app, buyer, title).await;
         let offer = submit_offer(app, &demand, seller).await;
         (demand, offer)
     }
@@ -387,7 +399,7 @@ async fn refusals_carry_no_destination() {
 
     // Withdrawn and rejected offers refuse without destination.
     let (withdrawn_demand, withdrawn_offer) =
-        demand_with_offer(&app, &buyer_cookie, &seller_cookie).await;
+        demand_with_offer(&app, &buyer_cookie, &seller_cookie, "Withdrawn Fridge").await;
     sqlx::query("UPDATE offers SET state = 'withdrawn' WHERE id = $1")
         .bind(withdrawn_offer.parse::<uuid::Uuid>().expect("id parses"))
         .execute(db.pool())
@@ -406,7 +418,7 @@ async fn refusals_carry_no_destination() {
     assert_no_destination(&body);
 
     let (rejected_demand, rejected_offer) =
-        demand_with_offer(&app, &buyer_cookie, &seller_cookie).await;
+        demand_with_offer(&app, &buyer_cookie, &seller_cookie, "Blocked Fridge").await;
     sqlx::query("UPDATE offers SET state = 'rejected' WHERE id = $1")
         .bind(rejected_offer.parse::<uuid::Uuid>().expect("id parses"))
         .execute(db.pool())
@@ -425,7 +437,7 @@ async fn refusals_carry_no_destination() {
 
     // Elapsed deadlines refuse as expired without destination.
     let (elapsed_demand, elapsed_offer) =
-        demand_with_offer(&app, &buyer_cookie, &seller_cookie).await;
+        demand_with_offer(&app, &buyer_cookie, &seller_cookie, "Suspended Fridge").await;
     let now = chrono::Utc::now();
     sqlx::query(
         "UPDATE request_cycles SET started_at = $2, deadline = $3
@@ -451,7 +463,7 @@ async fn refusals_carry_no_destination() {
 
     // Banned sellers, suspended buyers, and blocked pairs refuse alike.
     let (banned_demand, banned_offer) =
-        demand_with_offer(&app, &buyer_cookie, &seller_cookie).await;
+        demand_with_offer(&app, &buyer_cookie, &seller_cookie, "Expired Fridge").await;
     sqlx::query("UPDATE users SET state = 'banned' WHERE display_name = 'Refusal Seller'")
         .execute(db.pool())
         .await

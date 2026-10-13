@@ -80,11 +80,17 @@ async fn seed_active(pool: &sqlx::PgPool, display: &str, phone: &str) -> uuid::U
 
 /// One genuinely open either/600 demand through the real paths.
 async fn publish_open(pool: &sqlx::PgPool, author: uuid::Uuid) -> uuid::Uuid {
+    publish_open_titled(pool, author, "Refrigerator").await
+}
+
+/// Same as [`publish_open`] with an explicit title: exact duplicates refuse
+/// at publication, so independent fixtures need distinct titles.
+async fn publish_open_titled(pool: &sqlx::PgPool, author: uuid::Uuid, title: &str) -> uuid::Uuid {
     let draft = create_draft(
         pool,
         author,
         DraftInput {
-            title: Some("Refrigerator".to_owned()),
+            title: Some(title.to_owned()),
             category_code: Some("home_appliances".to_owned()),
             budget: Some("600.00".to_owned()),
             condition: Some("either".to_owned()),
@@ -543,7 +549,7 @@ async fn restriction_before_replay_returns_no_destination() {
         Err(ReplayError::ForbiddenState)
     );
     // A block lands the same way on a fresh demand.
-    let blocked_request = publish_open(db.pool(), author).await;
+    let blocked_request = publish_open_titled(db.pool(), author, "Blocked Fridge").await;
     let blocked_offer = submit_open(db.pool(), seller, blocked_request).await;
     let blocked_handoff = uuid::Uuid::now_v7();
     start_handoff(
@@ -593,7 +599,7 @@ async fn restriction_before_replay_returns_no_destination() {
         .execute(db.pool())
         .await
         .expect("synthetic unblock applies");
-    let fresh_request = publish_open(db.pool(), author).await;
+    let fresh_request = publish_open_titled(db.pool(), author, "Fresh Fridge").await;
     let fresh_offer = submit_open(db.pool(), seller, fresh_request).await;
     let fresh_handoff = uuid::Uuid::now_v7();
     let before = start_handoff(db.pool(), author, fresh_request, fresh_offer, fresh_handoff).await;

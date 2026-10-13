@@ -107,6 +107,8 @@ pub enum PublishError {
     /// The row is no longer a draft and not an active first cycle
     /// (terminal, suspended, or otherwise advanced elsewhere).
     ForbiddenState,
+    /// An identical open need already exists for this owner.
+    DuplicateIntent,
     /// The lookup or write failed.
     StorageFailed,
 }
@@ -125,6 +127,7 @@ impl std::fmt::Display for PublishError {
             Self::NotActive => f.write_str("account is not active"),
             Self::NotFound => f.write_str("draft not found"),
             Self::ForbiddenState => f.write_str("request cannot be published"),
+            Self::DuplicateIntent => f.write_str("duplicate open demand exists"),
             Self::StorageFailed => f.write_str("publication storage failed"),
         }
     }
@@ -308,6 +311,35 @@ pub async fn publish_request(
             .await
             .map_err(|_| PublishError::StorageFailed)?;
         return Err(error);
+    }
+    // Enforce exact duplicate intent in the same transaction: an identical
+    // open need refuses here, so concurrent publications serialize on the
+    // draft lock above and the loser observes the winner.
+    {
+        use crate::application::duplicate_intent::{
+            check_duplicate_intent, DuplicateError, NewIntent,
+        };
+        use crate::persistence::transaction::AttemptError;
+        let candidate = NewIntent {
+            title: snapshot.title.clone(),
+            category_code: snapshot.category_code.clone(),
+            budget_cents: snapshot.budget_cents,
+            condition: snapshot.condition.clone(),
+            city_code: snapshot.city_code.clone(),
+            region_code: snapshot.region_code.clone(),
+        };
+        if let Err(error) = check_duplicate_intent(&mut tx, author_id, &candidate).await {
+            tx.rollback()
+                .await
+                .map_err(|_| PublishError::StorageFailed)?;
+            return Err(match error {
+                AttemptError::Abort(DuplicateError::DuplicateIntent) => {
+                    PublishError::DuplicateIntent
+                }
+                AttemptError::Abort(_) => PublishError::StorageFailed,
+                AttemptError::Db(_) => PublishError::StorageFailed,
+            });
+        }
     }
     let started_at = chrono::Utc::now();
     let deadline = seven_day_deadline(started_at);

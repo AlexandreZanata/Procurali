@@ -272,11 +272,22 @@ async fn live_offer(
     author: uuid::Uuid,
     seller: uuid::Uuid,
 ) -> (uuid::Uuid, uuid::Uuid) {
+    live_offer_titled(pool, author, seller, "Refrigerator").await
+}
+
+/// Same as [`live_offer`] with an explicit title: exact duplicates refuse
+/// at publication, so independent fixtures need distinct titles.
+async fn live_offer_titled(
+    pool: &sqlx::PgPool,
+    author: uuid::Uuid,
+    seller: uuid::Uuid,
+    title: &str,
+) -> (uuid::Uuid, uuid::Uuid) {
     let draft = create_draft(
         pool,
         author,
         DraftInput {
-            title: Some("Refrigerator".to_owned()),
+            title: Some(title.to_owned()),
             category_code: Some("home_appliances".to_owned()),
             budget: Some("600.00".to_owned()),
             condition: Some("either".to_owned()),
@@ -1068,7 +1079,8 @@ async fn reversal_restores_only_account_eligibility() {
     .await
     .expect("repeat reversal converges");
     assert!(!again.reversed);
-    let (fresh_demand, fresh_offer) = live_offer(db.pool(), buyer, seller).await;
+    let (fresh_demand, fresh_offer) =
+        live_offer_titled(db.pool(), buyer, seller, "Washing Machine").await;
     let (status, fresh) = call(
         app.clone(),
         "POST",

@@ -1273,3 +1273,42 @@ async fn elapsed_active_row_has_no_offer_or_contact_action() {
     );
     db.cleanup().await.expect("suite cleans up");
 }
+
+#[tokio::test]
+async fn identical_second_publication_refuses_as_duplicate_intent() {
+    // Load-found wiring (P19-T02): the exact-duplicate check lives in the
+    // publication writer, so an identical open demand refuses with 409
+    // `duplicate_intent` instead of publishing a second need. A distinct
+    // title still publishes: near-duplicates stay reviewable.
+    let db = TestDatabase::create("p19t02_duplicate")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p19t02_duplicate_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let app = test_app(&db);
+    let owner = provision_active(&app, "+55 11 90000-0031", "Duplicate Owner").await;
+    let cookie = login_cookie(app.clone(), "+55 11 90000-0031").await;
+    let first = create_draft(&app, &cookie).await;
+    let (status, _) = publish_draft(&app, &cookie, &first.to_string()).await;
+    assert_eq!(status, StatusCode::CREATED);
+    let second = create_draft(&app, &cookie).await;
+    let (status, body) = publish_draft(&app, &cookie, &second.to_string()).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(body["code"], "duplicate_intent");
+    assert_eq!(
+        publish_request(db.pool(), owner, second).await,
+        Err(PublishError::DuplicateIntent)
+    );
+    let active: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM requests WHERE author_id = $1 AND state = 'active'",
+    )
+    .bind(owner)
+    .fetch_one(db.pool())
+    .await
+    .expect("requests read");
+    assert_eq!(active, 1, "the duplicate never activates");
+    db.cleanup().await.expect("suite cleans up");
+}

@@ -2,8 +2,10 @@
 # Fail-loud test tier dispatcher. See docs/engineering/testing.md.
 #   Usage: scripts/test.sh <tier> [--task TASK-ID]
 #   tiers: unit | api | privacy | web | e2e | all
-#   Tiers without a registered suite (load) exit nonzero instead of silently
-#   passing.
+#   Every tier has a registered suite and fails loudly without its target:
+#   integration/concurrency/ops need TEST_DATABASE_URL (disposable), e2e
+#   needs PROCURALI_E2E_BASE_URL plus TEST_DATABASE_URL, load needs
+#   LOAD_BASE_URL plus TEST_DATABASE_URL.
 #   The e2e tier requires PROCURALI_E2E_BASE_URL plus TEST_DATABASE_URL and
 #   fails loudly without them or with zero registered e2e cases.
 #   The ops tier requires TEST_DATABASE_URL (disposable) and fails loudly
@@ -42,7 +44,7 @@ run_e2e_tier() {
 cd "$BACKEND"
 
 usage() {
-  echo "usage: scripts/test.sh <unit|api|privacy|web|e2e|ops|critical-mutations|all> [--task TASK-ID]" >&2
+  echo "usage: scripts/test.sh <unit|api|privacy|web|e2e|ops|load|critical-mutations|all> [--task TASK-ID]" >&2
   exit 2
 }
 
@@ -105,7 +107,7 @@ if [ "$TIER" = "all" ]; then
       TARGETS+=("$tier:$target")
     done < <(tier_targets "$tier")
   done
-  echo "test.sh: pending tiers without registered suites: load"
+  echo "test.sh: all tiers have registered suites (integration, concurrency, e2e, load need an explicit live disposable target)"
   echo "test.sh: tier 'web' runs separately (node toolchain); tiers 'integration', 'concurrency' and 'e2e' need a live disposable stack"
   echo "test.sh: running cargo tiers for 'all'; invoking web tier next"
   run_web_tier
@@ -133,6 +135,22 @@ elif [ "$TIER" = "critical-mutations" ]; then
   "$REPO_ROOT/scripts/critical-mutations.sh"
   echo "test.sh: critical-mutations tier passed"
   exit 0
+elif [ "$TIER" = "load" ]; then
+  if [ -n "$TASK" ]; then
+    echo "test.sh: --task filtering is not supported for tier 'load' yet (failing loudly)" >&2
+    exit 2
+  fi
+  if [ -z "${LOAD_BASE_URL:-}" ]; then
+    echo "test.sh: LOAD_BASE_URL is required for tier 'load' (explicit disposable target; failing loudly)" >&2
+    exit 2
+  fi
+  if [ -z "${TEST_DATABASE_URL:-}" ]; then
+    echo "test.sh: TEST_DATABASE_URL is required for tier 'load' (explicit disposable naming; failing loudly)" >&2
+    exit 2
+  fi
+  "$REPO_ROOT/scripts/load-test.sh" --database-url "$TEST_DATABASE_URL" --base-url "$LOAD_BASE_URL"
+  echo "test.sh: load tier passed"
+  exit 0
 elif tier_targets "$TIER" >/dev/null; then
   if [ -n "$TASK" ]; then
     if ! task_targets "$TASK" >/dev/null; then
@@ -154,16 +172,8 @@ elif tier_targets "$TIER" >/dev/null; then
     done < <(tier_targets "$TIER")
   fi
 else
-  case "$TIER" in
-    load)
-      echo "test.sh: no suite registered for tier '$TIER' yet (failing loudly)" >&2
-      exit 3
-      ;;
-    *)
-      echo "test.sh: unknown tier '$TIER'" >&2
-      usage
-      ;;
-  esac
+  echo "test.sh: unknown tier '$TIER'" >&2
+  usage
 fi
 
 # Deduplicate targets while preserving order.

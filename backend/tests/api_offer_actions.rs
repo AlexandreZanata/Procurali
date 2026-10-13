@@ -87,11 +87,17 @@ fn offer_input() -> OfferInput {
 
 /// One genuinely open request through the real draft and publication paths.
 async fn publish_open(pool: &sqlx::PgPool, author: uuid::Uuid) -> uuid::Uuid {
+    publish_open_titled(pool, author, "Refrigerator").await
+}
+
+/// Same as [`publish_open`] with an explicit title: exact duplicates refuse
+/// at publication, so independent fixtures need distinct titles.
+async fn publish_open_titled(pool: &sqlx::PgPool, author: uuid::Uuid, title: &str) -> uuid::Uuid {
     let draft = create_draft(
         pool,
         author,
         DraftInput {
-            title: Some("Refrigerator".to_owned()),
+            title: Some(title.to_owned()),
             category_code: Some("home_appliances".to_owned()),
             budget: Some("600.00".to_owned()),
             condition: Some("either".to_owned()),
@@ -302,7 +308,17 @@ async fn submit_open_for(
     seller: uuid::Uuid,
     author: uuid::Uuid,
 ) -> (uuid::Uuid, uuid::Uuid) {
-    let request_id = publish_open(pool, author).await;
+    submit_open_for_titled(pool, seller, author, "Refrigerator Second").await
+}
+
+/// Same as [`submit_open_for`] with an explicit demand title.
+async fn submit_open_for_titled(
+    pool: &sqlx::PgPool,
+    seller: uuid::Uuid,
+    author: uuid::Uuid,
+    title: &str,
+) -> (uuid::Uuid, uuid::Uuid) {
+    let request_id = publish_open_titled(pool, author, title).await;
     let offer_id = submit_open(pool, seller, request_id).await;
     (request_id, offer_id)
 }
