@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Fail-loud test tier dispatcher. See docs/engineering/testing.md.
-# Usage: scripts/test.sh <tier> [--task TASK-ID]
+#   Usage: scripts/test.sh <tier> [--task TASK-ID]
 #   tiers: unit | api | privacy | web | e2e | all
-#   Tiers without a registered suite (integration, concurrency, ops,
-#   critical-mutations, load) exit nonzero instead of silently passing.
+#   Tiers without a registered suite (load) exit nonzero instead of silently
+#   passing.
 #   The e2e tier requires PROCURALI_E2E_BASE_URL plus TEST_DATABASE_URL and
 #   fails loudly without them or with zero registered e2e cases.
+#   The ops tier requires TEST_DATABASE_URL (disposable) and fails loudly
+#   without it or with zero registered ops cases.
 #   --task restricts to the named task's registered targets; unknown tasks or
 #   zero matches exit nonzero.
 set -euo pipefail
@@ -40,7 +42,7 @@ run_e2e_tier() {
 cd "$BACKEND"
 
 usage() {
-  echo "usage: scripts/test.sh <unit|api|privacy|web|e2e|critical-mutations|all> [--task TASK-ID]" >&2
+  echo "usage: scripts/test.sh <unit|api|privacy|web|e2e|ops|critical-mutations|all> [--task TASK-ID]" >&2
   exit 2
 }
 
@@ -54,6 +56,7 @@ tier_targets() {
     integration) printf '%s\n' "postgres_atomicity" "postgres_auth_limits" "postgres_blocks" "postgres_catalogs" "postgres_contact_limits" "postgres_contacts" "postgres_core" "postgres_discovery" "postgres_eligibility" "postgres_events" "postgres_expiry" "postgres_idempotency" "postgres_jobs" "postgres_metrics" "postgres_offer_cascades" "postgres_offer_limits" "postgres_offers" "postgres_outcome_prompts" "postgres_reports" "postgres_request_duplicates" "postgres_request_limits" "postgres_requests" "postgres_restoration" "postgres_retention" "postgres_transactions" "postgres_users" "deadline_requests" "request_revision" "retention_policy" ;;
     concurrency) printf '%s\n' "concurrency_contacts" "concurrency_discovery" "concurrency_matrix" "concurrency_outcomes" "concurrency_reports" ;;
     privacy) printf '%s\n' "privacy_logging" "privacy_surfaces" "provider_verification" ;;
+    ops) printf '%s\n' "ops_restart" ;;
     web) printf '%s\n' "web-component" ;;
     e2e) printf '%s\n' "e2e-suite" ;;
     critical-mutations) printf '%s\n' "critical-mutations-script" ;;
@@ -102,7 +105,7 @@ if [ "$TIER" = "all" ]; then
       TARGETS+=("$tier:$target")
     done < <(tier_targets "$tier")
   done
-  echo "test.sh: pending tiers without registered suites: ops load"
+  echo "test.sh: pending tiers without registered suites: load"
   echo "test.sh: tier 'web' runs separately (node toolchain); tiers 'integration', 'concurrency' and 'e2e' need a live disposable stack"
   echo "test.sh: running cargo tiers for 'all'; invoking web tier next"
   run_web_tier
@@ -152,7 +155,7 @@ elif tier_targets "$TIER" >/dev/null; then
   fi
 else
   case "$TIER" in
-    integration | concurrency | ops | critical-mutations | load)
+    load)
       echo "test.sh: no suite registered for tier '$TIER' yet (failing loudly)" >&2
       exit 3
       ;;
