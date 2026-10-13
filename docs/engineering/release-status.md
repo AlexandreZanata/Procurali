@@ -44,7 +44,17 @@ claimed. Every live gate below is pending on owner-supplied inputs.
 | Off-host backup restore from the actual destination | pending | Approved destination, encryption/key custody, retention, restore credentials, schedule |
 | Public launch authorization | pending | Launch city, moderation ownership and hours, user notices, explicit release authorization, pilot targets |
 
-Procedure for each gate: `infra/runbooks/staging-validation.md`. A local
+Procedure for each gate: [`infra/runbooks/staging-validation.md`](../../infra/runbooks/staging-validation.md). A local
 fake, a local restore, or a pushed branch never satisfies a live gate;
 missing inputs keep prior local results valid and block only their own
 gate.
+
+## Integration handoff
+
+A new checkout needs only tracked files: the [root
+README](../../README.md) carries the setup, check, test, and operation
+commands; [`infra/runbooks/`](../../infra/runbooks/) carries the procedures; [`contracts/`](../../contracts/)
+carries the API contract and the scenario registry. No private workspace
+is required or referenced. Scope verified is the mandatory free MVP;
+mobile apps, Radar Pro sales, subscriptions, and paid passes remain
+future. No automatic public deployment follows from this status.

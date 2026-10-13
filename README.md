@@ -33,3 +33,31 @@ Individuals use the basic marketplace for free. Professional monetization is pla
 5. Keep mandatory MVP, post-MVP, and future scope explicit and separate.
 
 All numeric thresholds in the specification are recommended starting policies, with a rationale and a review condition. They are not claims of validated product-market fit.
+
+## Implementation checkout (construction branch `codex/backend-mvp`)
+
+The free-MVP backend (Rust/Axum/PostgreSQL), reproducible infrastructure,
+and the minimal TypeScript web interface are implemented and verified
+from tracked files only — no private workspace is needed:
+
+- Start disposable infrastructure: `scripts/infra.sh up-test --suffix NAME --port PORT`
+  (development: `scripts/infra.sh up-dev`).
+- Quick gate: `./scripts/check.sh fast` (format, Clippy as errors, unit
+  tier, private-path guard).
+- Tiered suites: `./scripts/test.sh <unit|integration|api|concurrency|privacy|web|e2e|ops|load|critical-mutations|all>`
+  with an explicit disposable `TEST_DATABASE_URL`; `e2e` also needs
+  `PROCURALI_E2E_BASE_URL`, `load` needs `LOAD_BASE_URL`.
+- Operations: `scripts/smoke.sh` (schema + minimal flow probe, GET only),
+  `scripts/test-ops.sh` (restart proof), `scripts/backup.sh` /
+  `scripts/restore-test.sh` (backup and restore proof),
+  `scripts/deploy.sh` (disposable deploy/rollback), `scripts/load-test.sh`
+  (bounded load + correctness).
+- Release state: `docs/engineering/release-status.md` (tested revision,
+  tier results, pending live gates); procedures in `infra/runbooks/`.
+
+Verified scope is the mandatory free MVP (Request → Offers → Contact →
+Outcome with safety and administration). Native mobile apps, Radar Pro
+sales, subscriptions, and paid passes remain future work. Live phone
+verification, staging HTTPS, off-host restore, and public launch stay
+pending on owner-supplied inputs — a tested commit never implies a live
+deployment.

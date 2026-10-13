@@ -2,7 +2,7 @@
 
 **Language:** English  
 **Business baseline:** Version 1.1, October 7, 2026  
-**Current phase:** Business specification and documentation organization
+**Current phase:** Implementation verification on the `codex/backend-mvp` construction branch
 
 This is the entry point for agents and human reviewers. Each business topic has one canonical file. The [original specification entry point](BUSINESS_LOGIC_SPECIFICATION.md) retains the 27-section reading order, and the [manifest](manifest.json) provides machine-readable discovery.
 
@@ -104,6 +104,16 @@ in the topic files above; engineering files never copy or override business rule
 - [Architecture](engineering/architecture.md): Proposed module boundaries, runtime, and data conventions.
 - [Dependencies](engineering/dependencies.md): Planned stable pins and their official sources.
 - [Stack decision](engineering/decisions/DEC-0001-stack.md): Proposed implementation-stack choice and rationale.
+- [Authentication](engineering/authentication.md): Phone-verification protocol and session mechanics.
+- [API contract](engineering/api-contract.md): HTTP inventory notes alongside `contracts/openapi.yaml`.
+- [Testing](engineering/testing.md): Tier definitions and the scenario registry in `contracts/scenario-tests.json`.
+- [Local operation](engineering/local-operation.md): Development and disposable test stacks.
+- [Performance](engineering/performance.md): Measured bounded-load observations (not capacity promises).
+- [Release status](engineering/release-status.md): Tested revision, tier results, and pending live gates.
+- Domain, transaction, and auth follow-throughs: [DEC-0002](engineering/decisions/DEC-0002-domain-contract.md),
+  [DEC-0003](engineering/decisions/DEC-0003-transactions.md), [DEC-0004](engineering/decisions/DEC-0004-auth.md).
+- Operational procedures: [`infra/runbooks/`](../infra/runbooks/) (restart/outage, deployment, rollback, backups, smoke, staging validation, release checklist).
+- Verification entry points: `scripts/check.sh`, `scripts/test.sh`, `scripts/ci.sh`, and the [project status](maintenance/project-status.md).
 
 ### Templates
 

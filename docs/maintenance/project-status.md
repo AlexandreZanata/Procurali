@@ -1,7 +1,7 @@
 # Project status
 
-**Updated:** October 8, 2026  
-**Phase:** Implementation planning contracts (construction branch `codex/backend-mvp`, planning phase P00 in progress)  
+**Updated:** October 13, 2026  
+**Phase:** Implementation verification on the construction branch `codex/backend-mvp` (mandatory phases P00–P19 implemented; optional P20 Redis deferred)  
 **Business baseline:** Recommended version 1.1
 
 ## Available artifacts
@@ -13,12 +13,24 @@
 
 ## Implementation status
 
-No application implementation, infrastructure design, database schema, visual screen
-design, deployment, or passing application test suite is established yet. Execution
-contracts and dependency pins are being recorded on the construction branch; application
-code starts with the skeleton phase after the planning contracts complete.
+The free-MVP backend (Rust/Axum/PostgreSQL), reproducible one-host
+infrastructure, and the minimal componentized web interface are
+implemented on the construction branch and verified from tracked files
+only: full tier registry (unit, integration on real PostgreSQL, api,
+concurrency, privacy, web component, e2e over real HTTP, ops, bounded
+load, critical-mutations), plus restart/backup/restore/smoke proofs and
+the release gate. See [release status](../engineering/release-status.md)
+for the tested revision and results, and the [root README](../../README.md)
+for checkout, check, and operation commands.
 
-Specifications describe intended behavior. Unchecked readiness items are not evidence of completion.
+Specifications describe intended behavior; implementation evidence lives
+in the verification tiers above, not in documentation alone.
+
+Known construction follow-ups (not launch blockers for local
+correctness): the serving-binary merge (production router composition),
+the permanent e2e harness seeder, renewal-path duplicate enforcement,
+and test-cleanup hardening. Mobile apps, Radar Pro, subscriptions, and
+paid passes remain future work.
 
 ## Open operational choices before public launch
 

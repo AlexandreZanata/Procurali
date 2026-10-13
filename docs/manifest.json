@@ -871,6 +871,131 @@
         "engineering/architecture.md",
         "engineering/dependencies.md"
       ]
+    },
+    {
+      "id": "ENG-AUTH",
+      "path": "engineering/authentication.md",
+      "title": "Authentication and phone-verification protocol",
+      "kind": "engineering",
+      "status": "proposed",
+      "scope": "mvp",
+      "source_sections": [],
+      "summary": "Phone-verification provider boundary and session mechanics; mechanism only",
+      "related": [
+        "domain/users.md",
+        "trust/privacy-and-security.md",
+        "engineering/decisions/DEC-0004-auth.md"
+      ]
+    },
+    {
+      "id": "ENG-API",
+      "path": "engineering/api-contract.md",
+      "title": "API contract notes",
+      "kind": "engineering",
+      "status": "proposed",
+      "scope": "mvp",
+      "source_sections": [],
+      "summary": "HTTP inventory notes alongside the tracked OpenAPI contract; business meaning stays in docs",
+      "related": [
+        "domain/permissions.md",
+        "trust/privacy-and-security.md"
+      ]
+    },
+    {
+      "id": "ENG-TESTING",
+      "path": "engineering/testing.md",
+      "title": "Testing guide",
+      "kind": "engineering",
+      "status": "proposed",
+      "scope": "mvp",
+      "source_sections": [],
+      "summary": "Tier definitions and the scenario-to-test registry; invoked from tracked scripts only",
+      "related": [
+        "quality/acceptance-criteria.md",
+        "quality/edge-cases.md"
+      ]
+    },
+    {
+      "id": "ENG-LOCAL-OPS",
+      "path": "engineering/local-operation.md",
+      "title": "Local operation",
+      "kind": "engineering",
+      "status": "proposed",
+      "scope": "mvp",
+      "source_sections": [],
+      "summary": "Development and disposable test stack identities and helpers",
+      "related": [
+        "engineering/architecture.md"
+      ]
+    },
+    {
+      "id": "ENG-PERF",
+      "path": "engineering/performance.md",
+      "title": "Performance observations",
+      "kind": "engineering",
+      "status": "proposed",
+      "scope": "mvp",
+      "source_sections": [],
+      "summary": "Measured bounded-load observations for one disposable host; not capacity promises",
+      "related": [
+        "engineering/testing.md"
+      ]
+    },
+    {
+      "id": "ENG-RELEASE",
+      "path": "engineering/release-status.md",
+      "title": "Release status",
+      "kind": "engineering",
+      "status": "proposed",
+      "scope": "mvp",
+      "source_sections": [],
+      "summary": "Tested revision, tier results, and pending live gates; not a launch authorization",
+      "related": [
+        "product/mvp-scope.md",
+        "quality/readiness-checklist.md"
+      ]
+    },
+    {
+      "id": "ENG-DEC-0002",
+      "path": "engineering/decisions/DEC-0002-domain-contract.md",
+      "title": "Domain contract decision record",
+      "kind": "engineering",
+      "status": "proposed",
+      "scope": "mvp",
+      "source_sections": [],
+      "summary": "Money, time, text, and refusal contracts recorded before implementation",
+      "related": [
+        "engineering/architecture.md",
+        "domain/invariants.md"
+      ]
+    },
+    {
+      "id": "ENG-DEC-0003",
+      "path": "engineering/decisions/DEC-0003-transactions.md",
+      "title": "Transaction decision record",
+      "kind": "engineering",
+      "status": "proposed",
+      "scope": "mvp",
+      "source_sections": [],
+      "summary": "Transaction, retry, and idempotency behavior for implementation",
+      "related": [
+        "engineering/architecture.md",
+        "domain/invariants.md"
+      ]
+    },
+    {
+      "id": "ENG-DEC-0004",
+      "path": "engineering/decisions/DEC-0004-auth.md",
+      "title": "Authentication decision record",
+      "kind": "engineering",
+      "status": "proposed",
+      "scope": "mvp",
+      "source_sections": [],
+      "summary": "Identity provider boundary and session/challenge lifetimes",
+      "related": [
+        "engineering/authentication.md",
+        "domain/users.md"
+      ]
     }
   ]
 }
