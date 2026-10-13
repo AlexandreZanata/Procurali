@@ -235,6 +235,8 @@ pub mod operations {
     pub mod jobs;
     /// Graceful server lifecycle (drain on shutdown).
     pub mod lifecycle;
+    /// Operational indicators and response thresholds without private data.
+    pub mod metrics;
     /// Redacted structured observability (typed fields only, no secret channels).
     pub mod telemetry;
     /// Live Twilio Verify adapter over an injected transport.

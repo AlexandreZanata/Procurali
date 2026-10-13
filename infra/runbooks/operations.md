@@ -1,8 +1,9 @@
-# Operations runbook (restart, workers, outages)
+# Operations runbook (restart, workers, outages, observability)
 
-**Status:** Live procedure for the current phase. Companion script:
-`scripts/test-ops.sh` (disposable test stacks only). Backup and restore
-live in `backups.md`; deploy and rollback in `deployment.md`/`rollback.md`.
+**Status:** Live procedure for the current phase. Companion scripts:
+`scripts/test-ops.sh` (disposable restart proof) and `scripts/smoke.sh`
+(schema plus minimal flow probe, GET only). Backup and restore live in
+`backups.md`; deploy and rollback in `deployment.md`/`rollback.md`.
 
 ## Restart procedure
 
@@ -45,6 +46,49 @@ live in `backups.md`; deploy and rollback in `deployment.md`/`rollback.md`.
 - A cached contact destination must never be served after a block,
   suspension, deletion, withdrawal, or expired deadline; retries revalidate
   current eligibility before returning anything.
+
+## Observability (no private data)
+
+Operational indicators carry names and numbers only — readiness words,
+pool sizes, job states and ages, schema versions, and stable error codes.
+Phone numbers, precise addresses, report identities, private offer terms,
+codes, tokens, cookies, and URLs never enter metrics, logs, or smoke
+output (`backend/src/operations/metrics.rs`; correlation follows the
+redacted telemetry contract).
+
+- Readiness: process liveness plus dependency names (`database`) only.
+- Resources: pool size/idle gauges; saturation is inferred from queueing
+  and job age, never from invented language capacity numbers.
+- Errors: counters keyed by stable codes (`internal`, `unavailable`, ...);
+  caller text can never become a series.
+- Work age: oldest due unclaimed job and failed-job backlog per
+  `job_backlog`; a synthetic failure moves exactly its own indicator.
+- Thresholds are host settings (`PROCURALI_OPS_MAX_JOB_AGE_SECS`,
+  `PROCURALI_OPS_MAX_FAILED_JOBS`), documented starting points for this
+  single host — not performance promises. `scripts/smoke.sh --self-test`
+  proves the probe logic; `scripts/smoke.sh --database-url ... --base-url
+  ...` validates one real target (GET only).
+
+## Operational response
+
+- Database or pool saturation: stop writes at the proxy if needed, inspect
+  pool gauges and the oldest due job age, drain through the bounded worker,
+  and scale the host — never bypass eligibility, quotas, or the provider
+  boundary to shed load.
+- Worker lag: a due backlog older than the host job-age threshold pages a
+  human; recovery is reclaim-after-lease with attempts counted, never a
+  duplicate effect. Failed rows stay failed with their static reason until
+  a human dispositions them.
+- Provider errors: verification and handoff stay in the failed-proof state
+  (no anchor, no activation, no disclosure) until the provider recovers;
+  retries revalidate current eligibility first.
+- Failed backups: keep serving from the live database, preserve the last
+  proven artifact, and re-run `scripts/backup.sh` plus
+  `scripts/restore-test.sh` before claiming recoverability again.
+- Moderation backlog: review queues are worked oldest-first by accountable
+  staff through the audit-backed moderation writers (actor, reason, scope,
+  time, and previous/resulting eligibility on every decision); backlogs
+  never auto-approve, auto-ban, or silently drop reports.
 
 ## What to record
 
