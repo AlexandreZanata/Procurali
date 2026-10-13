@@ -2,10 +2,14 @@
 
 **Updated:** 2026-10-13  
 **Branch:** `codex/backend-mvp` (construction; not a launch authorization)  
-**Head tested:** `2235ea5` (`P19-T02: Measure bounded load and
-correctness`)  
+**Head tested:** `b3b4e55` (`P19-T04: Publish truthful engineering
+completion and integration handoff`; the P19-T05 delivery commit adds
+handoff records only — code identical)  
 **Live readiness:** NOT READY — no deployment or live verification is
 claimed. Every live gate below is pending on owner-supplied inputs.
+**Delivery:** phase P19 closed with verified GitHub evidence (see the
+[changelog](../maintenance/changelog.md)); merging to `main` or
+deploying any environment is a separate, unauthorized-by-default step.
 
 ## Verified locally (disposable stacks, synthetic fixtures)
 

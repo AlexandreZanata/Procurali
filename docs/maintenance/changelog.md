@@ -2,6 +2,13 @@
 
 This records significant documentation and business-baseline changes. It is not evidence of application implementation or a substitute for the canonical topic text.
 
+## October 13, 2026 — Backend MVP construction delivered on `codex/backend-mvp`
+
+- Implemented and verified the mandatory free MVP (Request → Offers → Contact → Outcome with safety and administration) as a Rust/Axum/PostgreSQL backend, reproducible one-host infrastructure, and a minimal TypeScript web interface; verification ran from tracked files only (unit, integration on real PostgreSQL, api, concurrency, privacy, web component, e2e over real HTTP, ops, bounded load, critical-mutations, plus restart/backup/restore/smoke proofs and the release gate).
+- Published the operator handoff: real setup/check/operation commands in the root README, the full engineering document set in the documentation index and manifest, evidence-based project status, release status with the tested revision and pending live gates, and runbooks for operations, deployment, rollback, backups, smoke, staging validation, and release cuts.
+- Recorded what is not claimed: no live phone verification, staging HTTPS, off-host restore, or public launch (all pending on owner-supplied inputs); mobile apps, Radar Pro, subscriptions, and paid passes remain future; the serving-binary merge, the permanent e2e harness seeder, renewal-path duplicate enforcement, and test-cleanup hardening are filed construction follow-ups. Pushing the construction branch is distinct from merging to `main` or deploying anything.
+- E2E over real HTTP: 20 of 27 specs pass; 7 stay pending on the external e2e harness seeder (fixtures file, harness accounts) — recorded, not skipped.
+
 ## October 7, 2026 — Version 1.1: Modular documentation for AI maintenance
 
 - Split the original 27-section specification into 31 canonical business files grouped by product, domain, workflows, trust, commercial planning, measurement, and quality.
