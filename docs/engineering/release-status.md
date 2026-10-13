@@ -2,24 +2,38 @@
 
 **Updated:** 2026-10-13  
 **Branch:** `codex/backend-mvp` (construction; not a launch authorization)  
-**Head tested:** `9664da2` (`P18-T06: Configure observability and
-operational response`)  
+**Head tested:** `2235ea5` (`P19-T02: Measure bounded load and
+correctness`)  
 **Live readiness:** NOT READY — no deployment or live verification is
 claimed. Every live gate below is pending on owner-supplied inputs.
 
 ## Verified locally (disposable stacks, synthetic fixtures)
 
-- Full tier registry green on the tested head: unit, integration (real
-  PostgreSQL), api, concurrency, privacy, web component, ops, and the
-  critical-mutations guard-sensitivity probes (see
-  `docs/engineering/testing.md` for tier definitions).
+- Full tier registry on the tested head with real PostgreSQL where
+  required: unit, integration, api, concurrency, privacy, web component,
+  ops, load (bounded mix with restriction/expiry/idempotency probes), and
+  the critical-mutations guard-sensitivity probes (all 6 guards killed;
+  see `docs/engineering/testing.md` for tier definitions).
+  `scripts/check-release.sh` (lockfiles, advisories, licenses, production
+  refusals) is green.
+- E2E over real HTTP against a disposable backend: 20 of 27 specs pass,
+  including the full buyer/seller loop with two contacts and the safety
+  alternatives. The remaining 7 need the external e2e harness seeder
+  (fixtures file, harness accounts) and stay pending — recorded, not
+  skipped.
+- Restore rehearsal on the tested head: API-seeded business rows backed
+  up and restored into an isolated target with exact snapshot and
+  migration equality; schema agreement, live probes, and one idempotent
+  contact replay (same contact, `repeat: true`) all re-verified against
+  the restored data.
 - Restart/worker/outage recovery, observability wiring, backup/restore
   proofs, migration-safe deploy/rollback procedure, and image/proxy
   topology proven against disposable targets only.
-- Known construction follow-up (not a live gate): the serving binary
+- Known construction follow-ups (not live gates): the serving-binary
   merge (production router composition in `main.rs`) is still open, so
   live-HTTP validation runs through explicitly scoped harnesses until it
-  lands. Nothing serving production traffic exists.
+  lands; renewal-path duplicate enforcement and test-cleanup hardening
+  are filed follow-ups. Nothing serving production traffic exists.
 
 ## Live gates (all pending; each names its missing input)
 
