@@ -430,6 +430,112 @@ pub async fn sweep_exhausted(
     Ok(swept.rows_affected())
 }
 
+/// Poll interval between claim rounds.
+pub const POLL_INTERVAL_SECS: u64 = 5;
+
+/// Lease length for one claimed batch.
+pub const CLAIM_LEASE_SECS: u64 = 60;
+
+/// How one claimed job ended.
+enum Settle {
+    /// The business effect happened and the job is complete.
+    Done,
+    /// A temporary failure: the attempt budget decides the next try.
+    Retryable,
+    /// The job can never succeed as written (unknown request or payload).
+    Terminal,
+}
+
+/// Process one claimed job by kind and settle it.
+///
+/// Unknown kinds fail terminally: a job nobody can process must not be
+/// retried forever. Processing failures fail retryably, so the bounded
+/// attempt budget decides the outcome.
+async fn settle_job(pool: &sqlx::PgPool, worker_id: &str, job: &Job) {
+    let now = chrono::Utc::now();
+    let outcome = match job.kind.as_str() {
+        crate::operations::jobs::expire_requests::EXPIRY_JOB_KIND => {
+            use crate::operations::jobs::expire_requests::{
+                parse_expiry_payload, process_expiry, ExpireJobError,
+            };
+            match parse_expiry_payload(&job.payload) {
+                Some((request_id, _cycle)) => match process_expiry(pool, request_id, now).await {
+                    Ok(_) => Settle::Done,
+                    Err(ExpireJobError::StorageFailed) => Settle::Retryable,
+                    Err(ExpireJobError::InvalidJob | ExpireJobError::UnknownRequest) => {
+                        Settle::Terminal
+                    }
+                },
+                None => Settle::Terminal,
+            }
+        }
+        crate::operations::jobs::outcome_prompts::OUTCOME_PROMPT_KIND => {
+            use crate::operations::jobs::outcome_prompts::{process_prompt, PromptError};
+            match process_prompt(pool, job).await {
+                Ok(_) => Settle::Done,
+                Err(PromptError::StorageFailed) => Settle::Retryable,
+                Err(PromptError::InvalidJob | PromptError::UnknownRequest) => Settle::Terminal,
+            }
+        }
+        _ => {
+            let _ = fail_job(pool, job.id, worker_id, false, "unknown job kind", now).await;
+            return;
+        }
+    };
+    match outcome {
+        Settle::Done => {
+            let _ = complete_job(pool, job.id, worker_id, now).await;
+        }
+        Settle::Retryable => {
+            let _ = fail_job(pool, job.id, worker_id, true, "processing failed", now).await;
+        }
+        Settle::Terminal => {
+            let _ = fail_job(pool, job.id, worker_id, false, "job not applicable", now).await;
+        }
+    }
+}
+
+/// Run the background worker until `shutdown` resolves.
+///
+/// Each round claims one bounded batch of due jobs, settles every claimed job
+/// exactly once, and sleeps for the poll interval. Storage failures never end
+/// the loop: a database outage must not silently stop the worker, and the
+/// claim budget bounds every individual job.
+pub async fn run_worker(
+    pool: &sqlx::PgPool,
+    worker_id: &str,
+    shutdown: tokio::sync::oneshot::Receiver<()>,
+) {
+    let lease = std::time::Duration::from_secs(CLAIM_LEASE_SECS);
+    let mut shutdown = shutdown;
+    loop {
+        let claimed = claim_jobs(
+            pool,
+            worker_id,
+            None,
+            MAX_CLAIM_BATCH,
+            lease,
+            chrono::Utc::now(),
+        )
+        .await;
+        match claimed {
+            Ok(jobs) => {
+                for job in &jobs {
+                    settle_job(pool, worker_id, job).await;
+                }
+            }
+            Err(_) => {
+                // A storage failure is not a reason to stop: the next round
+                // retries within the same bounded claim budget.
+            }
+        }
+        tokio::select! {
+            _ = &mut shutdown => return,
+            _ = tokio::time::sleep(std::time::Duration::from_secs(POLL_INTERVAL_SECS)) => {}
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

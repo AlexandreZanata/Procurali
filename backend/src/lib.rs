@@ -185,6 +185,8 @@ pub mod persistence {
 pub mod http {
     /// Registration, challenge, and confirmation routes (pending to active).
     pub mod accounts;
+    /// Production composition root: one router over every business boundary.
+    pub mod app;
     /// Static asset routes: built UI with safe cache headers.
     pub mod assets;
     /// Session routes: login, current account, and logout with CSRF contract.

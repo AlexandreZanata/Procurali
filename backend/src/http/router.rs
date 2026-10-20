@@ -6,6 +6,10 @@
 //! `backend/tests/api_scaffold.rs`, which mirrors this exact stack around
 //! body-reading and slow handlers (the skeleton has no slow production route;
 //! real JSON routes exercise the production stack directly from P04 onward).
+//!
+//! [`with_bounds`] is the single place where that stack is assembled, so the
+//! scaffold router and the production composition in [`super::app`] share one
+//! bound definition instead of two drifting copies.
 
 use super::health::{liveness, readiness, DependencyStatus};
 use axum::{
@@ -41,19 +45,32 @@ pub fn build_router_with_limits(
     body_limit_bytes: usize,
     timeout: Duration,
 ) -> Router {
-    Router::new()
-        .route("/health/live", get(liveness))
-        .route("/health/ready", get(readiness))
-        .fallback(fallback_unknown_route)
-        .layer(
-            ServiceBuilder::new()
-                .layer(RequestBodyLimitLayer::new(body_limit_bytes))
-                .layer(axum::error_handling::HandleErrorLayer::new(
-                    |_: tower::BoxError| async { StatusCode::REQUEST_TIMEOUT },
-                ))
-                .layer(tower::timeout::TimeoutLayer::new(timeout)),
-        )
-        .with_state(status)
+    with_bounds(
+        Router::new()
+            .route("/health/live", get(liveness))
+            .route("/health/ready", get(readiness))
+            .fallback(unknown_route)
+            .with_state(status),
+        body_limit_bytes,
+        timeout,
+    )
+}
+
+/// Apply the shared request bounds to a router: body size limit outside,
+/// timeout mapping inside, so a 413 never passes through the timeout mapper
+/// and a slow request surfaces as 408 instead of a dropped connection.
+pub fn with_bounds<S>(router: Router<S>, body_limit_bytes: usize, timeout: Duration) -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+{
+    router.layer(
+        ServiceBuilder::new()
+            .layer(RequestBodyLimitLayer::new(body_limit_bytes))
+            .layer(axum::error_handling::HandleErrorLayer::new(
+                |_: tower::BoxError| async { StatusCode::REQUEST_TIMEOUT },
+            ))
+            .layer(tower::timeout::TimeoutLayer::new(timeout)),
+    )
 }
 
 /// Stable unknown-route refusal.
@@ -62,7 +79,7 @@ pub fn build_router_with_limits(
 /// the error-code registry (`contracts/domain-vectors.json`) gains this entry
 /// when the structured-error card lands; the string is chosen now so wire
 /// behavior stays stable from the first scaffold onward.
-async fn fallback_unknown_route(request: Request<Body>) -> impl IntoResponse {
+pub async fn unknown_route(request: Request<Body>) -> impl IntoResponse {
     let _ = request;
     (
         StatusCode::NOT_FOUND,

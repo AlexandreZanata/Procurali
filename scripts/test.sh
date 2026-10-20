@@ -54,7 +54,7 @@ usage() {
 tier_targets() {
   case "$1" in
     unit) printf '%s\n' "bin" "configuration" "privacy_logging" "api_scaffold" ;;
-    api) printf '%s\n' "api_account_deletion" "api_accounts" "api_appeals" "api_auth_limits" "api_auth" "api_authorization_matrix" "api_blocks" "api_contacts" "api_contract" "api_feedback" "api_identity_history" "api_lifecycle_journeys" "api_metrics" "api_moderation_accounts" "api_moderation" "api_notices" "api_offer_actions" "api_offer_edits" "api_offer_reads" "api_offers" "api_offer_withdrawal" "api_phone_change" "api_policy_changes" "api_profiles" "api_public_html" "api_public_requests" "api_recovery" "api_reports" "api_reputation" "api_request_outcomes" "api_request_removal" "api_request_renewal" "api_requests" "api_safety_journeys" "api_scaffold" "api_share_attribution" "api_sharing" "api_staff_auth" ;;
+    api) printf '%s\n' "api_account_deletion" "api_accounts" "api_appeals" "api_auth_limits" "api_auth" "api_authorization_matrix" "api_blocks" "api_contacts" "api_contract" "api_feedback" "api_identity_history" "api_lifecycle_journeys" "api_metrics" "api_moderation_accounts" "api_moderation" "api_notices" "api_offer_actions" "api_offer_edits" "api_offer_reads" "api_offers" "api_offer_withdrawal" "api_phone_change" "api_policy_changes" "api_profiles" "api_production_composition" "api_public_html" "api_public_requests" "api_recovery" "api_reports" "api_reputation" "api_request_outcomes" "api_request_removal" "api_request_renewal" "api_requests" "api_safety_journeys" "api_scaffold" "api_share_attribution" "api_sharing" "api_staff_auth" ;;
     integration) printf '%s\n' "postgres_atomicity" "postgres_auth_limits" "postgres_blocks" "postgres_catalogs" "postgres_contact_limits" "postgres_contacts" "postgres_core" "postgres_discovery" "postgres_eligibility" "postgres_events" "postgres_expiry" "postgres_idempotency" "postgres_jobs" "postgres_metrics" "postgres_offer_cascades" "postgres_offer_limits" "postgres_offers" "postgres_outcome_prompts" "postgres_reports" "postgres_request_duplicates" "postgres_request_limits" "postgres_requests" "postgres_restoration" "postgres_retention" "postgres_transactions" "postgres_users" "deadline_requests" "request_revision" "retention_policy" ;;
     concurrency) printf '%s\n' "concurrency_contacts" "concurrency_discovery" "concurrency_matrix" "concurrency_outcomes" "concurrency_reports" ;;
     privacy) printf '%s\n' "privacy_logging" "privacy_surfaces" "provider_verification" ;;
@@ -75,6 +75,7 @@ task_targets() {
     P01-T04) printf '%s\n' "api_scaffold" ;;
     P17-T02) printf '%s\n' "api_authorization_matrix" ;;
     P17-T03) printf '%s\n' "concurrency_matrix" "postgres_atomicity" ;;
+    P21-T01) printf '%s\n' "api_production_composition" ;;
     *) return 1 ;;
   esac
 }

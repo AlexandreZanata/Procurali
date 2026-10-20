@@ -13,6 +13,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
@@ -66,6 +67,14 @@ impl Secret {
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+
+    /// The protected value, for the few places that must consume it (the
+    /// database URL, the phone keys). Callers must never log, print, or
+    /// render the result; [`Secret`]'s own `Debug` keeps it redacted.
+    #[must_use]
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
 }
 
 impl fmt::Debug for Secret {
@@ -109,7 +118,20 @@ pub struct Settings {
     session_key: Secret,
     public_origin: Option<String>,
     test_fixed_clock: Option<String>,
+    phone_lookup_key: Secret,
+    phone_encryption_key: Secret,
+    fake_verify_code: Option<Secret>,
+    assets_dir: PathBuf,
+    bind_address: String,
 }
+
+/// Default directory holding the built web bundle, relative to the process
+/// working directory.
+pub const DEFAULT_ASSETS_DIR: &str = "web/dist";
+
+/// Default bind address: loopback only, so an unconfigured process never
+/// listens on a public interface.
+pub const DEFAULT_BIND_ADDRESS: &str = "127.0.0.1:8080";
 
 impl Settings {
     /// Minimum session-key length accepted in production.
@@ -177,6 +199,27 @@ impl Settings {
             return Err(ConfigError::invalid("PHONE_PROVIDER"));
         }
 
+        // The deterministic proof code exists only with the fake provider, and
+        // only where doubles are allowed. It is never a default: the server
+        // must be told which code the local fake accepts.
+        let fake_verify_code = match get("FAKE_VERIFY_CODE") {
+            Some(code) => {
+                if phone_provider != PhoneProvider::Fake {
+                    return Err(ConfigError::invalid("FAKE_VERIFY_CODE"));
+                }
+                if !environment.allows_test_doubles() {
+                    return Err(ConfigError::invalid("FAKE_VERIFY_CODE"));
+                }
+                Some(Secret(code))
+            }
+            None => {
+                if phone_provider == PhoneProvider::Fake {
+                    return Err(ConfigError::missing("FAKE_VERIFY_CODE"));
+                }
+                None
+            }
+        };
+
         let (twilio_account_sid, twilio_auth_token, twilio_verify_service_sid) =
             if phone_provider == PhoneProvider::Twilio {
                 (
@@ -223,6 +266,21 @@ impl Settings {
             None => None,
         };
 
+        // Phone identity keys: one deterministic lookup digest and one
+        // authenticated-encryption passphrase. Both are secrets with no
+        // default, and both must stay stable across restarts.
+        let phone_lookup_key = Secret(required("PHONE_LOOKUP_KEY")?);
+        let phone_encryption_key = Secret(required("PHONE_ENCRYPTION_KEY")?);
+
+        let assets_dir =
+            PathBuf::from(get("APP_ASSETS_DIR").unwrap_or_else(|| DEFAULT_ASSETS_DIR.to_owned()));
+
+        let bind_address =
+            get("APP_BIND_ADDRESS").unwrap_or_else(|| DEFAULT_BIND_ADDRESS.to_owned());
+        if !is_bind_address(&bind_address) {
+            return Err(ConfigError::invalid("APP_BIND_ADDRESS"));
+        }
+
         Ok(Self {
             environment,
             database_url: Secret(database_url),
@@ -234,6 +292,11 @@ impl Settings {
             session_key,
             public_origin,
             test_fixed_clock,
+            phone_lookup_key,
+            phone_encryption_key,
+            fake_verify_code,
+            assets_dir,
+            bind_address,
         })
     }
 
@@ -265,6 +328,44 @@ impl Settings {
     #[must_use]
     pub fn public_origin(&self) -> Option<&str> {
         self.public_origin.as_deref()
+    }
+
+    /// Application database URL. The value is a secret: callers must not log
+    /// it, and the redacted [`fmt::Debug`] rendering never carries it.
+    #[must_use]
+    pub fn database_url(&self) -> &str {
+        self.database_url.expose()
+    }
+
+    /// Key for the deterministic phone lookup digest.
+    #[must_use]
+    pub fn phone_lookup_key(&self) -> &str {
+        self.phone_lookup_key.expose()
+    }
+
+    /// Passphrase for the authenticated phone ciphertext.
+    #[must_use]
+    pub fn phone_encryption_key(&self) -> &str {
+        self.phone_encryption_key.expose()
+    }
+
+    /// Fixed proof code of the deterministic fake provider, when it is the
+    /// selected provider. The value is a secret: callers must not log it.
+    #[must_use]
+    pub fn fake_verify_code(&self) -> Option<&str> {
+        self.fake_verify_code.as_ref().map(Secret::expose)
+    }
+
+    /// Directory holding the built web bundle.
+    #[must_use]
+    pub fn assets_dir(&self) -> &Path {
+        &self.assets_dir
+    }
+
+    /// Address the served application binds to.
+    #[must_use]
+    pub fn bind_address(&self) -> &str {
+        &self.bind_address
     }
 }
 
@@ -298,12 +399,35 @@ impl fmt::Debug for Settings {
                 "test_fixed_clock",
                 &self.test_fixed_clock.as_ref().map(|_| "set"),
             )
+            .field("phone_lookup_key", &self.phone_lookup_key)
+            .field("phone_encryption_key", &self.phone_encryption_key)
+            .field(
+                "fake_verify_code",
+                &self.fake_verify_code.as_ref().map(|_| "set"),
+            )
+            .field("assets_dir", &self.assets_dir)
+            .field("bind_address", &self.bind_address)
             .finish()
     }
 }
 
 fn is_postgres_url(value: &str) -> bool {
     value.starts_with("postgres://") || value.starts_with("postgresql://")
+}
+
+/// Accept `host:port` with a bounded TCP port. The host may be a name, an
+/// IPv4 literal, or a bracketed IPv6 literal; the port is always numeric.
+fn is_bind_address(value: &str) -> bool {
+    let Some((host, port)) = value.rsplit_once(':') else {
+        return false;
+    };
+    if host.is_empty() || !host.chars().all(|c| c.is_ascii_graphic() && c != ' ') {
+        return false;
+    }
+    let Ok(port) = port.parse::<u32>() else {
+        return false;
+    };
+    (1..=65_535).contains(&port)
 }
 
 /// Minimal RFC3339-UTC shape check (`YYYY-MM-DDTHH:MM:SSZ`).

@@ -177,20 +177,25 @@ fn production_config_refuses_fake_or_missing_credentials() {
         settings_map(&[
             ("DATABASE_URL", "postgres://u@127.0.0.1:5432/procurali_dev"),
             ("SESSION_KEY", "test-only-session-key-long-enough"),
+            ("PHONE_LOOKUP_KEY", "test-only-lookup-key"),
+            ("PHONE_ENCRYPTION_KEY", "test-only-encryption-key"),
         ])
     };
     // Production refuses the fake double.
     let mut production_fake = base();
     production_fake.insert("PROCURALI_ENV".to_owned(), "production".to_owned());
     production_fake.insert("PHONE_PROVIDER".to_owned(), "fake".to_owned());
+    production_fake.insert("FAKE_VERIFY_CODE".to_owned(), "135790".to_owned());
     assert!(Settings::from_map(&production_fake).is_err());
-    // Test/development accept the fake double.
+    // Test/development accept the fake double with its explicit proof code.
     for environment in ["test", "development"] {
         let mut allowed = base();
         allowed.insert("PROCURALI_ENV".to_owned(), environment.to_owned());
         allowed.insert("PHONE_PROVIDER".to_owned(), "fake".to_owned());
+        allowed.insert("FAKE_VERIFY_CODE".to_owned(), "135790".to_owned());
         let settings = Settings::from_map(&allowed).expect("fake allowed here");
         assert!(settings.allows_test_doubles());
+        assert_eq!(settings.fake_verify_code(), Some("135790"));
     }
     // Live mode without credentials is refused everywhere.
     for environment in ["test", "production"] {
