@@ -51,8 +51,7 @@ deploying any environment is a separate, unauthorized-by-default step.
 
 ## Known construction follow-ups (not live gates)
 
-- Renewal-path duplicate enforcement and test-cleanup hardening remain
-  open.
+- Renewal-path duplicate enforcement remains open.
 - The live Twilio Verify HTTPS transport is not part of this build: the
   served binary refuses `PHONE_PROVIDER=twilio` instead of pretending a
   proof was delivered. Production startup therefore still waits on that
@@ -61,17 +60,16 @@ deploying any environment is a separate, unauthorized-by-default step.
   outcome prompts are implemented and proven at the application level, but
   nothing schedules them yet, so the served worker currently has no work
   to claim.
-- The api and integration tiers show load-sensitive flakes in several race
-  suites (timing assertions and suite database cleanup) on this
-  workstation. The same failures reproduce on the unmodified baseline
-  revision — measured on the tested head and on `f620018`: the api tier
-  failed 1 target on the tested head and 3 and 4 targets on the baseline,
-  with a different suite each time (`api_accounts`, `api_phone_change`,
-  `api_moderation_accounts`, `api_offer_withdrawal`, `api_reputation`),
-  while `postgres_atomicity` failed 3 of 6 and 4 of 6 consecutive runs
-  respectively. The suites pass in isolation and the tiers pass on a quiet
-  machine. This belongs to the recorded test-cleanup and hardening
-  follow-up.
+- The load-sensitive failures the api and integration tiers showed before
+  are resolved on this revision: a restricted seller now refuses contact
+  with the documented account-side meaning (so the ban-versus-contact race
+  has one defined outcome), the commit-visibility proof waits for the
+  commit instead of assuming a fixed delay, and the disposable database
+  cleanup terminates the suite's own leftover sessions before dropping it.
+  Measured on the tested head: `postgres_atomicity` 0 failures in 10
+  consecutive runs (7 in 10 on the unmodified baseline `afd48f9`), and the
+  tracked CI entry point (`scripts/ci.sh`) green twice in a row with the
+  e2e tier included.
 - Nothing serving production traffic exists.
 
 ## Live gates (all pending; each names its missing input)

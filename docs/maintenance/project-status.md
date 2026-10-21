@@ -30,10 +30,10 @@ Specifications describe intended behavior; implementation evidence lives
 in the verification tiers above, not in documentation alone.
 
 Known construction follow-ups (not launch blockers for local
-correctness): renewal-path duplicate enforcement, test-cleanup hardening,
-the live phone-verification transport, and the scheduling of background
-jobs from business flows. Mobile apps, Radar Pro, subscriptions, and paid
-passes remain future work.
+correctness): renewal-path duplicate enforcement, the live
+phone-verification transport, and the scheduling of background jobs from
+business flows. Mobile apps, Radar Pro, subscriptions, and paid passes
+remain future work.
 
 ## Open operational choices before public launch
 
