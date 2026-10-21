@@ -42,7 +42,7 @@ proves the off-host destination.
    `GET /health/ready` (ready), one public request read (no phone-shaped
    material), and one cookie-less protected read (refused, no message sent).
    `scripts/smoke.sh --database-url ... --base-url ...` encodes these probes
-   (GET only); point it at the staging origin when the serving binary lands.
+   (GET only); point it at the staging origin.
 2. Assert cookie transport: `HttpOnly`, `Secure`, and explicit
    `SameSite`/origin handling on session cookies over HTTPS.
 3. Exercise one registration-to-verification round trip with the test

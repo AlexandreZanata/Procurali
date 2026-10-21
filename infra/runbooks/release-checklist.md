@@ -19,9 +19,13 @@ api, concurrency, privacy, web, e2e, ops, and critical-mutations, plus
 `scripts/check.sh fast`. E2E needs a live disposable backend over HTTP;
 specs requiring the external harness seeder (fixtures file, harness
 accounts) stay pending with the exact missing input instead of failing
-the cut — the serving-binary merge and the harness seeder are recorded
-follow-ups, not silent skips. Zero discovered tests, skips, or
-`#[ignore]` anywhere fail the cut.
+the cut — the harness seeder is a recorded follow-up, not a silent skip.
+Zero discovered tests, skips, or `#[ignore]` anywhere fail the cut.
+
+The serving proof belongs to the same cut: `scripts/build-artifact.sh
+--serve-smoke` starts the built image against a disposable database and
+requires real liveness, readiness, public traffic, a refused cookie-less
+staff read, a healthy container, and a clean SIGTERM drain.
 
 ## 3. Restore rehearsal on the final revision
 

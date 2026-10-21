@@ -27,6 +27,14 @@ use procurali_backend::persistence::pool::{self, PoolConfig};
 const STARTUP_REFUSED: u8 = 2;
 
 fn main() -> std::process::ExitCode {
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    if arguments.first().map(String::as_str) == Some("--health-check") {
+        return health_check();
+    }
+    if !arguments.is_empty() {
+        eprintln!("procurali-backend: refusing to start: unknown argument");
+        return std::process::ExitCode::from(STARTUP_REFUSED);
+    }
     let runtime = match tokio::runtime::Runtime::new() {
         Ok(runtime) => runtime,
         Err(_) => {
@@ -41,6 +49,59 @@ fn main() -> std::process::ExitCode {
             std::process::ExitCode::from(STARTUP_REFUSED)
         }
     }
+}
+
+/// Probe the local readiness endpoint once and report the result as the exit
+/// code. The container health check uses it: no extra image dependency, and
+/// the same probe an operator can run by hand.
+fn health_check() -> std::process::ExitCode {
+    let address = std::env::var("APP_BIND_ADDRESS")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| procurali_backend::operations::config::DEFAULT_BIND_ADDRESS.to_owned());
+    if readiness_probe(&address) {
+        std::process::ExitCode::SUCCESS
+    } else {
+        std::process::ExitCode::FAILURE
+    }
+}
+
+/// One readiness request over plain TCP. Blocking I/O in a short-lived
+/// process keeps the image free of an HTTP client dependency.
+fn readiness_probe(address: &str) -> bool {
+    use std::io::{Read, Write};
+    use std::time::Duration;
+
+    let Ok(mut stream) = std::net::TcpStream::connect(address) else {
+        return false;
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(3)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(3)));
+    let request =
+        format!("GET /health/ready HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n");
+    if stream.write_all(request.as_bytes()).is_err() {
+        return false;
+    }
+    let mut response = Vec::new();
+    let mut buffer = [0_u8; 1024];
+    loop {
+        match stream.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(read) => {
+                response.extend_from_slice(&buffer[..read]);
+                if response.len() > 65_536 {
+                    break;
+                }
+            }
+            Err(_) => break,
+        }
+    }
+    is_ready_response(&String::from_utf8_lossy(&response))
+}
+
+/// True when the response is a 200 carrying the ready body.
+fn is_ready_response(response: &str) -> bool {
+    response.starts_with("HTTP/1.1 200") && response.contains("\"ready\"")
 }
 
 /// Serve until a termination signal arrives.
@@ -211,6 +272,20 @@ mod tests {
         let settings = settings(&pairs);
         let refusal = select_provider(&settings).expect_err("the live provider is refused");
         assert!(refusal.contains("twilio"));
+    }
+
+    #[test]
+    fn the_health_check_reads_only_a_ready_200() {
+        assert!(is_ready_response(
+            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\n\r\n{\"status\":\"ready\",\"unavailable\":[]}"
+        ));
+        assert!(!is_ready_response(
+            "HTTP/1.1 503 Service Unavailable\r\n\r\n{\"status\":\"not_ready\",\"unavailable\":[\"database\"]}"
+        ));
+        assert!(!is_ready_response(
+            "HTTP/1.1 200 OK\r\n\r\n{\"status\":\"alive\"}"
+        ));
+        assert!(!is_ready_response(""));
     }
 
     #[test]

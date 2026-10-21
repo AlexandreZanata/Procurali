@@ -106,5 +106,5 @@ construction. The database service uses the same pinned
 test-only password and an explicit disposable `TEST_DATABASE_URL`; a
 missing or unreachable database fails the run instead of skipping.
 The e2e tier stays out of `ci.sh`: it needs an orchestrated
-disposable stack with a serving binary (a recorded follow-up), so
+disposable stack with a served application and the harness seeder, so
 clean-checkout proofs run it explicitly with the batch harness.

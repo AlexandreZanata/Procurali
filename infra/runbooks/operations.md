@@ -5,6 +5,31 @@
 (schema plus minimal flow probe, GET only). Backup and restore live in
 `backups.md`; deploy and rollback in `deployment.md`/`rollback.md`.
 
+## Served process
+
+The application image runs the serving binary: validated settings, a bounded
+pool, schema agreement, one composed router, and graceful shutdown. Startup is
+refused, with a named reason and no value, when a setting is missing, the
+database is unreachable, or the applied schema differs from the tracked
+migrations. A refused startup never binds a port.
+
+- Health: `GET /health/live` (process-local) and `GET /health/ready`
+  (pool-backed; 503 with the dependency name only while the database is
+  unusable). The container health check runs
+  `procurali-backend --health-check`, which probes readiness once and
+  reports the result as its exit code.
+- Shutdown: SIGTERM (or an interrupt) drains in-flight requests and exits
+  cleanly; the container stop path is bounded by the compose stop grace
+  period.
+- Configuration: `infra/env.example` lists every setting, including the
+  phone identity keys, which must stay stable across restarts. The
+  deterministic fake provider and its proof code are refused outside
+  disposable stacks.
+- Proof: `scripts/build-artifact.sh --serve-smoke` runs the built image
+  against a disposable database and requires real liveness, readiness,
+  public traffic, a refused cookie-less staff read, a healthy container,
+  and a clean drain.
+
 ## Restart procedure
 
 1. Restart the database container (`docker restart <container>`); wait for

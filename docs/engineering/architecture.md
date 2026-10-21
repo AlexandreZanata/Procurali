@@ -18,13 +18,23 @@ One Rust application in `backend/`, organized into module boundaries (not separa
   event/notice stores. Parameterized queries exclusively.
 - `http/`: Axum router, handlers, DTO allowlists, structured errors, session/CSRF handling,
   health/readiness. Handlers parse, authenticate, call one application operation, map one
-  explicit public result.
+  explicit public result. `http/app.rs` is the composition root: the single place where the
+  boundaries become one served router.
 - `operations/`: validated configuration, redacted structured logging, lifecycle/shutdown,
   bounded PostgreSQL-backed worker (expiry, outcome prompts, retention), provider clients
   (Twilio Verify live adapter behind a narrow trait; deterministic fake for tests/dev only).
 
 PostgreSQL 18.6 is the authority for resource state, ownership, verification/session
 eligibility, quotas, business events, and audit. Native UUIDv7 identifiers.
+
+## Served application
+
+`backend/src/main.rs` is the serving binary: validated settings, a bounded pool, schema
+agreement with the tracked migrations, one composed router, and graceful shutdown on
+SIGTERM or interrupt. It refuses to start, naming the reason and printing no value, when
+a setting is missing, the database is unreachable, or the applied schema differs from
+the tracked migrations. `--health-check` probes readiness once and reports the result as
+its exit code; the container image uses it as its health check.
 
 ## Web
 

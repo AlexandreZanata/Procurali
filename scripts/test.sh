@@ -58,7 +58,7 @@ tier_targets() {
     integration) printf '%s\n' "postgres_atomicity" "postgres_auth_limits" "postgres_blocks" "postgres_catalogs" "postgres_contact_limits" "postgres_contacts" "postgres_core" "postgres_discovery" "postgres_eligibility" "postgres_events" "postgres_expiry" "postgres_idempotency" "postgres_jobs" "postgres_metrics" "postgres_offer_cascades" "postgres_offer_limits" "postgres_offers" "postgres_outcome_prompts" "postgres_reports" "postgres_request_duplicates" "postgres_request_limits" "postgres_requests" "postgres_restoration" "postgres_retention" "postgres_transactions" "postgres_users" "deadline_requests" "request_revision" "retention_policy" ;;
     concurrency) printf '%s\n' "concurrency_contacts" "concurrency_discovery" "concurrency_matrix" "concurrency_outcomes" "concurrency_reports" ;;
     privacy) printf '%s\n' "privacy_logging" "privacy_surfaces" "provider_verification" ;;
-    ops) printf '%s\n' "ops_restart" ;;
+    ops) printf '%s\n' "ops_restart" "ops_serving" ;;
     web) printf '%s\n' "web-component" ;;
     e2e) printf '%s\n' "e2e-suite" ;;
     critical-mutations) printf '%s\n' "critical-mutations-script" ;;
@@ -76,6 +76,7 @@ task_targets() {
     P17-T02) printf '%s\n' "api_authorization_matrix" ;;
     P17-T03) printf '%s\n' "concurrency_matrix" "postgres_atomicity" ;;
     P21-T01) printf '%s\n' "api_production_composition" ;;
+    P21-T02) printf '%s\n' "ops_serving" ;;
     *) return 1 ;;
   esac
 }

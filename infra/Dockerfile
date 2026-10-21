@@ -1,4 +1,5 @@
-# Procurali free-MVP application image (P18-T01).
+# Procurali free-MVP application image (P18-T01; serving binary merged in
+# P21-T01/P21-T02).
 #
 # Pinned builder and runtime stages with digest-pinned bases (pulled
 # 2026-10-11; re-resolve both tag and digest together on upgrade, never
@@ -6,8 +7,8 @@
 # carries the binary crate, the compiled web bundle, migrations, and
 # the public API contract — nothing else (see infra/.dockerignore).
 # Non-root runtime, exec-form entrypoint, SIGTERM shutdown path.
-# No HEALTHCHECK yet: health endpoints need the serving-binary merge
-# (recorded follow-up); the Dockerfile already exposes the app port.
+# The health check reuses the binary itself (`--health-check`), so the
+# image needs no HTTP client and no extra package.
 
 # --- builder: exact locked release binary ---
 # Context is the repository root. The crate keeps its backend/ + web/
@@ -36,8 +37,11 @@ RUN chown -R appuser:appuser /app
 USER appuser
 ENV PROCURALI_ENV=production
 ENV APP_ASSETS_DIR=/app/web-dist
+ENV APP_BIND_ADDRESS=0.0.0.0:8080
 EXPOSE 8080
 STOPSIGNAL SIGTERM
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["/app/procurali-backend", "--health-check"]
 ARG GIT_SHA=unknown
 ARG BUILD_DATE=unknown
 LABEL org.opencontainers.image.revision="${GIT_SHA}" \

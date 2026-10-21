@@ -41,6 +41,34 @@ If host ports 5432/5433 are occupied by unrelated local projects, pass `--port`
 with a free loopback port (e.g. `--port 55432`); committed defaults stay standard.
 `TEST_DATABASE_URL` must use the same port.
 
+## Running the served application locally
+
+The backend binary serves the real application (one composed router over every
+business boundary). It needs validated settings, a reachable database, and a
+migrated schema; it never applies migrations itself.
+
+```sh
+cd backend
+cargo run --bin procurali-backend
+```
+
+Required settings (see `infra/env.example` for the full list):
+
+- `DATABASE_URL`: the application database.
+- `PHONE_LOOKUP_KEY`, `PHONE_ENCRYPTION_KEY`: stable phone identity keys,
+  required with no default.
+- `SESSION_KEY`: required with no default.
+- `PHONE_PROVIDER=fake` with `FAKE_VERIFY_CODE`: development and test only;
+  production refuses the deterministic fake.
+- `APP_BIND_ADDRESS` (default `127.0.0.1:8080`), `APP_ASSETS_DIR` (default
+  `web/dist`).
+
+Startup refuses, naming the reason and printing no value, when a setting is
+missing, the database is unreachable, or the applied schema differs from the
+tracked migrations. `procurali-backend --health-check` probes readiness once
+and reports the result as its exit code; the container image uses it as its
+health check.
+
 ## Later phases
 
 Migration runners (P02-T03), per-suite fixture isolation (P02-T05), and CI

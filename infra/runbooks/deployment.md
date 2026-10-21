@@ -28,10 +28,19 @@ Order inside the script (each step gates the next):
    migration failure aborts before services start; readiness is never
    reported and the error names the failing migration.
 4. Poll `_sqlx_migrations` until the applied count equals the
-   migration files; services wait for the compatible schema (HTTP
-   readiness belongs to the server-merge follow-up).
+   migration files; services wait for the compatible schema. The served
+   application refuses to start against a different schema, so a
+   mismatched database can never serve traffic.
 5. Start `app` (pinned tag, never `latest`) and `proxy`; assert the
    running app container image equals the requested tag.
+
+The application image serves traffic: its entrypoint is the serving
+binary, its health check is `procurali-backend --health-check`, and
+`scripts/build-artifact.sh --serve-smoke` proves that behavior against a
+disposable database. A production deployment still needs the live phone
+verification transport and the authorized staging inputs before it can
+start; the deterministic fake provider is refused outside disposable
+stacks by design.
 
 `--dry-run` prints this plan and changes nothing.
 

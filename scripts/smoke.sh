@@ -11,8 +11,8 @@
 # one cookie-less staff-metrics read that must answer 401. Only GET is ever
 # sent: no verification, contact, or WhatsApp message can fire.
 # Without --base-url the HTTP flow reports PENDING (exit 2) instead of
-# inventing success; a live server needs the serving-binary merge recorded
-# as the P18-T01 follow-up. Credentials never appear in output.
+# inventing success: the caller has to name the served target. Credentials
+# never appear in output.
 set -euo pipefail
 
 SMOKE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -210,7 +210,7 @@ smoke_main() {
   echo "smoke: (1/2) schema agreement (applied migrations vs tracked files)"
   smoke_check_schema "$database_url" || return 1
   if [ -z "$base_url" ]; then
-    echo "smoke: (2/2) HTTP flow: PENDING (no --base-url; a live server needs the serving-binary merge, P18-T01 follow-up)"
+    echo "smoke: (2/2) HTTP flow: PENDING (no --base-url; the served target must be named)"
     return 2
   fi
   smoke_check_base_url "$base_url" || return 2

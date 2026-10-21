@@ -7,9 +7,10 @@
 # log limits are bounded; no wildcard credentialed CORS exists anywhere
 # (the backend answers same-origin only). Actual domain, certificates,
 # and secrets arrive with staging inputs (P18-T07); this file carries
-# none. The application image serves traffic after the server-merge
-# follow-up; until then the app service starts the startup scaffold,
-# which refuses to serve without validated production settings.
+# none. The application image serves traffic (the serving binary merged in
+# P21-T01); production startup still refuses the deterministic fake
+# provider and refuses to start before the live provider transport and
+# the authorized staging inputs exist.
 #
 # Required environment (see infra/env.deploy.example):
 #   APP_IMAGE, DOMAIN, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
