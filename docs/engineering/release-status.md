@@ -2,8 +2,8 @@
 
 **Updated:** 2026-10-20  
 **Branch:** `codex/backend-mvp` (construction; not a launch authorization)  
-**Head tested:** `5340d60` (`P21-T02: Prove live HTTP serving on a
-disposable stack`; the release-status commit that follows adds these
+**Head tested:** `c5f73db` (`P21-T02: Repair the TLS dependency advisories
+behind the release gate`; the release-status commit that follows adds these
 handoff records only — application code identical)  
 **Live readiness:** NOT READY — no deployment or live verification is
 claimed. Every live gate below is pending on owner-supplied inputs.
@@ -57,10 +57,14 @@ deploying any environment is a separate, unauthorized-by-default step.
   outcome prompts are implemented and proven at the application level, but
   nothing schedules them yet, so the served worker currently has no work
   to claim.
-- The integration tier shows load-sensitive flakes in three race suites
-  (timing assertions and suite database cleanup) on this workstation; the
-  same suites pass in isolation and the same failures reproduce on the
-  unmodified baseline revision.
+- The integration tier shows load-sensitive flakes in a few race suites
+  (timing assertions and suite database cleanup) on this workstation. The
+  same failures reproduce on the unmodified baseline revision — measured on
+  the tested head and on `f620018`: `postgres_atomicity` failed 3 of 6 and
+  4 of 6 consecutive runs respectively, and `postgres_jobs` failed 2 of 6
+  and 1 of 6. The suites pass in isolation and the tier passes when the
+  machine is quiet. This belongs to the recorded test-cleanup and
+  hardening follow-up.
 - Nothing serving production traffic exists.
 
 ## Live gates (all pending; each names its missing input)
