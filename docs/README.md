@@ -112,6 +112,9 @@ in the topic files above; engineering files never copy or override business rule
 - [Release status](engineering/release-status.md): Tested revision, tier results, and pending live gates.
 - Domain, transaction, and auth follow-throughs: [DEC-0002](engineering/decisions/DEC-0002-domain-contract.md),
   [DEC-0003](engineering/decisions/DEC-0003-transactions.md), [DEC-0004](engineering/decisions/DEC-0004-auth.md).
+- Optional acceleration and refusal-taxonomy decisions:
+  [DEC-0005](engineering/decisions/DEC-0005-redis.md) (measured Redis deferral) and
+  [DEC-0006](engineering/decisions/DEC-0006-contact-refusal-taxonomy.md).
 - Operational procedures: [`infra/runbooks/`](../infra/runbooks/) (restart/outage, deployment, rollback, backups, smoke, staging validation, release checklist).
 - Verification entry points: `scripts/check.sh`, `scripts/test.sh`, `scripts/ci.sh`, and the [project status](maintenance/project-status.md).
 

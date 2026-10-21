@@ -2,7 +2,7 @@
   "schema_version": 1,
   "documentation_version": "1.1",
   "business_baseline_status": "recommended",
-  "last_updated": "2026-10-07",
+  "last_updated": "2026-10-21",
   "language": "English",
   "path_base": "docs/",
   "purpose": "Find the canonical document for an AI-maintained task without duplicating business rules.",
@@ -116,7 +116,7 @@
       "status": "recommended-business-baseline",
       "scope": "mixed",
       "source_sections": [
-        "5.1–5.16"
+        "5.1\u20135.16"
       ],
       "summary": "Conceptual entities, ownership, responsibilities, and relationships",
       "related": [
@@ -995,6 +995,34 @@
       "related": [
         "engineering/authentication.md",
         "domain/users.md"
+      ]
+    },
+    {
+      "id": "ENG-DEC-0005",
+      "path": "engineering/decisions/DEC-0005-redis.md",
+      "title": "Redis acceleration decision record",
+      "kind": "engineering",
+      "status": "adopted",
+      "scope": "mvp",
+      "source_sections": [],
+      "summary": "Measured cache candidates, the deferral decision, and its re-entry criteria",
+      "related": [
+        "engineering/performance.md",
+        "engineering/architecture.md"
+      ]
+    },
+    {
+      "id": "ENG-DEC-0006",
+      "path": "engineering/decisions/DEC-0006-contact-refusal-taxonomy.md",
+      "title": "Contact refusal taxonomy decision record",
+      "kind": "engineering",
+      "status": "adopted",
+      "scope": "mvp",
+      "source_sections": [],
+      "summary": "One refusal meaning per restriction kind; the wire code stays forbidden_state",
+      "related": [
+        "workflows/whatsapp-contact.md",
+        "engineering/api-contract.md"
       ]
     }
   ]

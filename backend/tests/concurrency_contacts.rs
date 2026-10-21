@@ -215,7 +215,7 @@ async fn restriction_first_disables_handoff() {
         .expect("synthetic suspension applies");
     assert_eq!(
         start_handoff(db.pool(), author, suspended.0, suspended.1).await,
-        Err(ContactError::ForbiddenState)
+        Err(ContactError::SellerNotActive)
     );
     assert_eq!(contact_rows(db.pool(), suspended.1).await, 0);
     sqlx::query("UPDATE users SET state = 'active' WHERE id = $1")

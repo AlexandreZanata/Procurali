@@ -236,7 +236,7 @@ pub async fn start_contact(
         tx.rollback()
             .await
             .map_err(|_| ContactError::StorageFailed)?;
-        return Err(ContactError::ForbiddenState);
+        return Err(ContactError::SellerNotActive);
     }
     if blocked_either_direction(&mut *tx, buyer_id, seller_id)
         .await
