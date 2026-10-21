@@ -3,11 +3,12 @@
 #   Usage: scripts/test.sh <tier> [--task TASK-ID]
 #   tiers: unit | api | privacy | web | e2e | all
 #   Every tier has a registered suite and fails loudly without its target:
-#   integration/concurrency/ops need TEST_DATABASE_URL (disposable), e2e
-#   needs PROCURALI_E2E_BASE_URL plus TEST_DATABASE_URL, load needs
-#   LOAD_BASE_URL plus TEST_DATABASE_URL.
-#   The e2e tier requires PROCURALI_E2E_BASE_URL plus TEST_DATABASE_URL and
-#   fails loudly without them or with zero registered e2e cases.
+#   integration/concurrency/ops need TEST_DATABASE_URL (disposable), load
+#   needs LOAD_BASE_URL plus TEST_DATABASE_URL.
+#   The e2e tier starts its own disposable stack (database, migrations, the
+#   served application, the harness seed, and the browser journey) through
+#   scripts/e2e-stack.sh; it needs Docker and Node, and it fails loudly on
+#   any missing tool, unreachable target, or failing spec.
 #   The ops tier requires TEST_DATABASE_URL (disposable) and fails loudly
 #   without it or with zero registered ops cases.
 #   --task restricts to the named task's registered targets; unknown tasks or
@@ -33,12 +34,15 @@ run_web_tier() {
   npx playwright test --project=component
 }
 
-# Full-journey tier: real disposable backend/database through the harness.
-# Missing env, unreachable backend, or zero e2e cases fails loudly.
+# Full-journey tier: the served application over a disposable stack.
+# The stack script owns the database, the migrations, the served target, the
+# harness seed, and the teardown; a missing tool, an unreachable target, or
+# a failing spec fails loudly.
 run_e2e_tier() {
-  cd "$WEB"
-  echo "test.sh: e2e: playwright e2e project (real disposable stack)"
-  npx playwright test --project=e2e
+  cd "$REPO_ROOT"
+  echo "test.sh: e2e: disposable stack (database, served application, harness seed, browser journey)"
+  "$REPO_ROOT/scripts/e2e-stack.sh" --suffix "e2e$$"
+  echo "test.sh: e2e: every registered spec passed against the served application"
 }
 
 cd "$BACKEND"
