@@ -1,13 +1,13 @@
 # Release status
 
-**Updated:** 2026-10-20  
+**Updated:** 2026-10-21  
 **Branch:** `codex/backend-mvp` (construction; not a launch authorization)  
-**Head tested:** `c5f73db` (`P21-T02: Repair the TLS dependency advisories
-behind the release gate`; the release-status commit that follows adds these
+**Head tested:** `7c3474e` (`P22-T01: Seed the harness state and orchestrate
+the disposable e2e stack`; the release-status commit that follows adds these
 handoff records only — application code identical)  
 **Live readiness:** NOT READY — no deployment or live verification is
 claimed. Every live gate below is pending on owner-supplied inputs.
-**Delivery:** phase P21 closed with verified GitHub evidence (see the
+**Delivery:** phase P22 closed with verified GitHub evidence (see the
 [changelog](../maintenance/changelog.md)); merging to `main` or
 deploying any environment is a separate, unauthorized-by-default step.
 
@@ -20,11 +20,15 @@ deploying any environment is a separate, unauthorized-by-default step.
   see `docs/engineering/testing.md` for tier definitions).
   `scripts/check-release.sh` (lockfiles, advisories, licenses, production
   refusals) is green.
-- E2E over real HTTP against a disposable backend: 20 of 27 specs pass,
-  including the full buyer/seller loop with two contacts and the safety
-  alternatives. The remaining 7 need the external e2e harness seeder
-  (fixtures file, harness accounts) and stay pending — recorded, not
-  skipped.
+- E2E over real HTTP against the served application: all 27 registered
+  browser specs pass over a disposable database. The permanent harness
+  (`scripts/e2e-stack.sh`) starts a disposable database, applies the tracked
+  migrations, serves the real application over it, seeds the harness state
+  (harness accounts, a withdrawn offer, a suspended demand, and the fixtures
+  file the specs read), runs the browser journey, and tears the stack down.
+  The specs that previously stayed pending for a missing harness input now
+  run: withdrawn-slot permanence, withdrawn-supply refusals, suspended
+  visibility, and the staff moderation journey.
 - Restore rehearsal on the tested head: API-seeded business rows backed
   up and restored into an isolated target with exact snapshot and
   migration equality; schema agreement, live probes, and one idempotent
@@ -47,8 +51,8 @@ deploying any environment is a separate, unauthorized-by-default step.
 
 ## Known construction follow-ups (not live gates)
 
-- The permanent e2e harness seeder, renewal-path duplicate enforcement,
-  and test-cleanup hardening remain open.
+- Renewal-path duplicate enforcement and test-cleanup hardening remain
+  open.
 - The live Twilio Verify HTTPS transport is not part of this build: the
   served binary refuses `PHONE_PROVIDER=twilio` instead of pretending a
   proof was delivered. Production startup therefore still waits on that

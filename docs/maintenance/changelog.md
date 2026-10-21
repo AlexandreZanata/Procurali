@@ -2,6 +2,12 @@
 
 This records significant documentation and business-baseline changes. It is not evidence of application implementation or a substitute for the canonical topic text.
 
+## October 21, 2026 — The permanent e2e harness on `codex/backend-mvp`
+
+- Gave the browser tier a permanent harness: a seeder that reaches the harness state through the real business operations (registration and proof flow, audited staff grant, published demand, withdrawn offer, suspended demand) and writes the fixtures file the specs read, plus one script that starts a disposable database, applies the tracked migrations, serves the real application over it, seeds, runs the browser journey, and tears the stack down. The harness refuses any database that is not explicitly disposable and loopback.
+- Closed the harness-blocked browser specs: all 27 registered e2e specs now run against the served application over a disposable database, including withdrawn-slot permanence, withdrawn-supply refusals, suspended visibility, and the staff moderation journey. The e2e tier no longer needs an external database tool or an operator-supplied target, and it is registered in the tracked CI entry point.
+- Recorded what is not claimed: no live phone verification, staging HTTPS, off-host restore, or public launch (all pending on owner-supplied inputs); the live Verify HTTPS transport is still absent; business flows still do not schedule background jobs; renewal-path duplicate enforcement and test-cleanup hardening remain open.
+
 ## October 20, 2026 — The served application on `codex/backend-mvp`
 
 - Implemented the serving-binary follow-up recorded since P18-T01: one production composition root merges every HTTP boundary into one router under the production body/timeout bounds, the privacy headers, and the stable unknown-route refusal; the binary serves it over real HTTP with validated settings, a bounded pool, schema agreement, pool-backed readiness, typed value-free startup refusals, and a graceful SIGTERM drain. No business rule changed and PostgreSQL remains the only authority.

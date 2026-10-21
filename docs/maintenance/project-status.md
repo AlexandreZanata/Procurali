@@ -1,7 +1,7 @@
 # Project status
 
-**Updated:** October 20, 2026  
-**Phase:** Implementation verification on the construction branch `codex/backend-mvp` (mandatory phases P00–P19 and P21 implemented; optional P20 Redis deferred)  
+**Updated:** October 21, 2026  
+**Phase:** Implementation verification on the construction branch `codex/backend-mvp` (mandatory phases P00–P19, P21, and P22 implemented; optional P20 Redis deferred)  
 **Business baseline:** Recommended version 1.1
 
 ## Available artifacts
@@ -30,11 +30,10 @@ Specifications describe intended behavior; implementation evidence lives
 in the verification tiers above, not in documentation alone.
 
 Known construction follow-ups (not launch blockers for local
-correctness): the permanent e2e harness seeder, renewal-path duplicate
-enforcement, test-cleanup hardening, the live phone-verification
-transport, and the scheduling of background jobs from business flows.
-Mobile apps, Radar Pro, subscriptions, and paid passes remain future
-work.
+correctness): renewal-path duplicate enforcement, test-cleanup hardening,
+the live phone-verification transport, and the scheduling of background
+jobs from business flows. Mobile apps, Radar Pro, subscriptions, and paid
+passes remain future work.
 
 ## Open operational choices before public launch
 

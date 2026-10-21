@@ -47,6 +47,9 @@ echo "ci.sh: concurrency tier (real PostgreSQL, disposable database)"
 echo "ci.sh: web tier (pinned toolchain, no backend)"
 "$REPO_ROOT/scripts/test.sh" web
 
+echo "ci.sh: e2e tier (the served application over a disposable stack)"
+"$REPO_ROOT/scripts/test.sh" e2e
+
 echo "ci.sh: critical-mutations tier (isolated worktree probes)"
 "$REPO_ROOT/scripts/test.sh" critical-mutations
 

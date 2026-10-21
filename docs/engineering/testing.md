@@ -13,7 +13,7 @@ invoke these tiers from tracked files only — never from `.local/`.
 | concurrency | `./scripts/test.sh concurrency` | Barrier-coordinated races with exact persisted count/state/event assertions |
 | privacy | `./scripts/test.sh privacy` | Canary non-disclosure, DTO allowlists, handoff gating, log/header/cache checks |
 | web | `./scripts/test.sh web` | TS checks, component/unit behavior (no full-integration claim) |
-| e2e | `./scripts/test.sh e2e` | Playwright buyer/seller/staff journeys on a real disposable backend/database |
+| e2e | `./scripts/test.sh e2e` | Playwright buyer/seller/staff journeys against the served application over a disposable database |
 | ops | `./scripts/test.sh ops` | Migration/restart/worker/config/backup-restore/deployment smoke on configured targets |
 | critical-mutations | `./scripts/test.sh critical-mutations` | Fault-injection sensitivity probes in an isolated copy (P17): every guard in `contracts/critical-guards.json` must fail its named suites with the fault applied and pass without it; survivors fail the gate |
 | load | `./scripts/test.sh load` | Bounded load + correctness probes on an explicitly selected disposable/staging target |
@@ -34,10 +34,14 @@ component project):
 - concurrency: all 4 `concurrency_*` suites (barrier-coordinated races)
 - privacy: `privacy_logging`, `privacy_surfaces`, `provider_verification`
 - web: pinned install, `tsc --noEmit`, build, component project
-- e2e: Playwright e2e project against a real disposable stack
-  (serial workers; fresh database per verification run — session
-  lookup is a documented linear scan, so shared databases slow
-  authenticated round-trips)
+- e2e: the permanent harness — `scripts/e2e-stack.sh` starts a disposable
+  PostgreSQL container, applies the tracked migrations with the packaged
+  migration job, serves the real application over it, seeds the harness
+  state (harness accounts, a withdrawn offer, a suspended demand, and the
+  fixtures file the specs read), runs the Playwright e2e project, and tears
+  the stack down. The served application runs the release binary: session
+  verification uses Argon2, and a debug build makes the documented slow-auth
+  path slow enough to time the browser suite out.
 Pure-vector suites (`domain_vectors`, `deadline_vectors`,
 `liquidity_vectors`) stay directly runnable and join a tier with the
 final verification card.
@@ -96,7 +100,8 @@ via `rustup` (matching `backend/rust-toolchain.toml`), system Node with
 the Playwright shell browser, then locked fetch/build, `fmt --check`,
 `clippy --all-targets -- -D warnings`, the registered unit/api/privacy
 tiers, the full integration and concurrency tiers against a real
-PostgreSQL service, the web tier, the critical-mutations tier, the
+PostgreSQL service, the web tier, the e2e tier (the served application
+over its own disposable stack), the critical-mutations tier, the
 release gate (lockfiles, advisories, licenses, secrets, production
 config refusals), and the private-path guard. The workflow reads
 tracked files only (it fails if any `.local/` path is tracked or
@@ -105,6 +110,6 @@ construction. The database service uses the same pinned
 `postgres:18.6` image+digest as local stacks, with a synthetic
 test-only password and an explicit disposable `TEST_DATABASE_URL`; a
 missing or unreachable database fails the run instead of skipping.
-The e2e tier stays out of `ci.sh`: it needs an orchestrated
-disposable stack with a served application and the harness seeder, so
-clean-checkout proofs run it explicitly with the batch harness.
+The e2e tier brings its own disposable database container, so it needs
+Docker on the runner and nothing else: no external database tool and no
+operator credential.

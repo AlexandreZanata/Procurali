@@ -45,8 +45,10 @@ from tracked files only — no private workspace is needed:
 - Quick gate: `./scripts/check.sh fast` (format, Clippy as errors, unit
   tier, private-path guard).
 - Tiered suites: `./scripts/test.sh <unit|integration|api|concurrency|privacy|web|e2e|ops|load|critical-mutations|all>`
-  with an explicit disposable `TEST_DATABASE_URL`; `e2e` also needs
-  `PROCURALI_E2E_BASE_URL`, `load` needs `LOAD_BASE_URL`.
+  with an explicit disposable `TEST_DATABASE_URL`; `load` needs
+  `LOAD_BASE_URL`. The `e2e` tier brings its own disposable stack
+  (database, migrations, served application, harness seed) through
+  `scripts/e2e-stack.sh` and needs Docker and Node.
 - Operations: `scripts/smoke.sh` (schema + minimal flow probe, GET only),
   `scripts/test-ops.sh` (restart proof), `scripts/backup.sh` /
   `scripts/restore-test.sh` (backup and restore proof),
