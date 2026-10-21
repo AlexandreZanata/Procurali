@@ -358,6 +358,16 @@ pub async fn renew_request(
     )
     .await
     .map_err(|_| RenewError::StorageFailed)?;
+    // The renewed cycle's expiry sweep belongs to this renewal: it commits
+    // with it, so a live cycle always carries the work that ends it.
+    crate::operations::jobs::expire_requests::enqueue_expiry_in_tx(
+        &mut tx,
+        request_id,
+        cycle_number + 1,
+        deadline,
+    )
+    .await
+    .map_err(|_| RenewError::StorageFailed)?;
     tx.commit().await.map_err(|_| RenewError::StorageFailed)?;
     let stored = requests::request(pool, request_id)
         .await

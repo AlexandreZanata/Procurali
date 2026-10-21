@@ -15,7 +15,7 @@
 //! the buyer's three answers and states plainly that silence changes
 //! nothing — it links nowhere and verifies nothing.
 
-use crate::operations::worker::{enqueue, get_job, Job, NewJob, DEFAULT_MAX_ATTEMPTS};
+use crate::operations::worker::{enqueue_in_tx, get_job_in_tx, Job, NewJob, DEFAULT_MAX_ATTEMPTS};
 use crate::persistence::notices::{record as record_notice, NewNotice};
 use serde_json::{json, Value};
 
@@ -101,12 +101,32 @@ pub async fn schedule_contact_prompt(
     request_id: uuid::Uuid,
     cycle_number: i32,
 ) -> Result<Option<Job>, PromptError> {
+    let mut tx = pool.begin().await.map_err(|_| PromptError::StorageFailed)?;
+    let job = schedule_contact_prompt_in_tx(&mut tx, request_id, cycle_number).await?;
+    tx.commit().await.map_err(|_| PromptError::StorageFailed)?;
+    Ok(job)
+}
+
+/// Schedule the contact prompt inside the caller's transaction.
+///
+/// The prompt belongs to the contact that produced it: it commits with the
+/// contact fact, so a recorded contact always carries its prompt and a
+/// rolled-back contact schedules nothing.
+///
+/// # Errors
+///
+/// Returns [`PromptError::StorageFailed`] on database failure only.
+pub async fn schedule_contact_prompt_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    request_id: uuid::Uuid,
+    cycle_number: i32,
+) -> Result<Option<Job>, PromptError> {
     let first: Option<chrono::DateTime<chrono::Utc>> = sqlx::query_scalar(
         "SELECT min(initiated_at) FROM contacts WHERE request_id = $1 AND cycle_number = $2",
     )
     .bind(request_id)
     .bind(cycle_number)
-    .fetch_one(pool)
+    .fetch_one(&mut **tx)
     .await
     .map_err(|_| PromptError::StorageFailed)?;
     let first = match first {
@@ -114,7 +134,7 @@ pub async fn schedule_contact_prompt(
         None => return Ok(None),
     };
     schedule_prompt(
-        pool,
+        tx,
         request_id,
         cycle_number,
         "post_contact",
@@ -135,11 +155,28 @@ pub async fn schedule_expiry_prompt(
     cycle_number: i32,
     deadline: chrono::DateTime<chrono::Utc>,
 ) -> Result<Option<Job>, PromptError> {
-    schedule_prompt(pool, request_id, cycle_number, "expiry", deadline).await
+    let mut tx = pool.begin().await.map_err(|_| PromptError::StorageFailed)?;
+    let job = schedule_expiry_prompt_in_tx(&mut tx, request_id, cycle_number, deadline).await?;
+    tx.commit().await.map_err(|_| PromptError::StorageFailed)?;
+    Ok(job)
+}
+
+/// Schedule the expiry prompt inside the caller's transaction.
+///
+/// # Errors
+///
+/// Returns [`PromptError::StorageFailed`] on database failure only.
+pub async fn schedule_expiry_prompt_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    request_id: uuid::Uuid,
+    cycle_number: i32,
+    deadline: chrono::DateTime<chrono::Utc>,
+) -> Result<Option<Job>, PromptError> {
+    schedule_prompt(tx, request_id, cycle_number, "expiry", deadline).await
 }
 
 async fn schedule_prompt(
-    pool: &sqlx::PgPool,
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     request_id: uuid::Uuid,
     cycle_number: i32,
     trigger: &str,
@@ -154,18 +191,18 @@ async fn schedule_prompt(
     .bind(OUTCOME_PROMPT_KIND)
     .bind(request_id.to_string())
     .bind(cycle_number)
-    .fetch_optional(pool)
+    .fetch_optional(&mut **tx)
     .await
     .map_err(|_| PromptError::StorageFailed)?;
     if let Some(id) = pending {
-        return get_job(pool, id)
+        return get_job_in_tx(tx, id)
             .await
             .map_err(|_| PromptError::StorageFailed)?
             .ok_or(PromptError::StorageFailed)
             .map(Some);
     }
-    let job = enqueue(
-        pool,
+    let job = enqueue_in_tx(
+        tx,
         NewJob {
             kind: OUTCOME_PROMPT_KIND.to_owned(),
             payload: json!({"request_id": request_id, "cycle": cycle_number, "trigger": trigger}),
@@ -177,10 +214,10 @@ async fn schedule_prompt(
     sqlx::query("UPDATE background_jobs SET not_before = $2 WHERE id = $1")
         .bind(job.id)
         .bind(not_before)
-        .execute(pool)
+        .execute(&mut **tx)
         .await
         .map_err(|_| PromptError::StorageFailed)?;
-    get_job(pool, job.id)
+    get_job_in_tx(tx, job.id)
         .await
         .map_err(|_| PromptError::StorageFailed)?
         .ok_or(PromptError::StorageFailed)

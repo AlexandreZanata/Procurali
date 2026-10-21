@@ -26,7 +26,7 @@
 //! touches offer rows that do not exist yet.
 
 use crate::application::request_eligibility::{expire_if_elapsed, ExpiryOutcome};
-use crate::operations::worker::{enqueue, get_job, Job, NewJob};
+use crate::operations::worker::{enqueue_in_tx, get_job_in_tx, Job, NewJob};
 use crate::persistence::notices::{record as record_notice, NewNotice, NoticeError};
 use serde_json::{json, Value};
 
@@ -102,11 +102,38 @@ pub async fn enqueue_expiry(
     cycle: i32,
     deadline: chrono::DateTime<chrono::Utc>,
 ) -> Result<Job, ExpireJobError> {
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|_| ExpireJobError::StorageFailed)?;
+    let job = enqueue_expiry_in_tx(&mut tx, request_id, cycle, deadline).await?;
+    tx.commit()
+        .await
+        .map_err(|_| ExpireJobError::StorageFailed)?;
+    Ok(job)
+}
+
+/// Enqueue one expiry sweep inside the caller's transaction.
+///
+/// The sweep belongs to the cycle that schedules it: it commits with the
+/// publication or renewal that opened that cycle, so a live cycle always
+/// carries its expiry work and a refused publication schedules nothing.
+///
+/// # Errors
+///
+/// Returns [`ExpireJobError::InvalidJob`] for a non-positive cycle, else
+/// the worker's enqueue refusal.
+pub async fn enqueue_expiry_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    request_id: uuid::Uuid,
+    cycle: i32,
+    deadline: chrono::DateTime<chrono::Utc>,
+) -> Result<Job, ExpireJobError> {
     if cycle < 1 {
         return Err(ExpireJobError::InvalidJob);
     }
-    let job = enqueue(
-        pool,
+    let job = enqueue_in_tx(
+        tx,
         NewJob {
             kind: EXPIRY_JOB_KIND.to_owned(),
             payload: json!({"request_id": request_id, "cycle": cycle}),
@@ -118,10 +145,10 @@ pub async fn enqueue_expiry(
     sqlx::query("UPDATE background_jobs SET not_before = $2 WHERE id = $1")
         .bind(job.id)
         .bind(deadline)
-        .execute(pool)
+        .execute(&mut **tx)
         .await
         .map_err(|_| ExpireJobError::StorageFailed)?;
-    get_job(pool, job.id)
+    get_job_in_tx(tx, job.id)
         .await
         .map_err(|_| ExpireJobError::StorageFailed)?
         .ok_or(ExpireJobError::StorageFailed)

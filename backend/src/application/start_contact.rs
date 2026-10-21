@@ -311,6 +311,16 @@ pub async fn start_contact(
     )
     .await
     .map_err(|_| ContactError::StorageFailed)?;
+    // The outcome prompt belongs to this contact: it commits with it, so the
+    // first contact of a cycle always carries its prompt, later contacts
+    // converge on the same one, and a refused contact schedules nothing.
+    crate::operations::jobs::outcome_prompts::schedule_contact_prompt_in_tx(
+        &mut tx,
+        request_id,
+        actionable.cycle_number,
+    )
+    .await
+    .map_err(|_| ContactError::StorageFailed)?;
     tx.commit().await.map_err(|_| ContactError::StorageFailed)?;
     Ok(Handoff {
         contact_id: initiated.contact.id,

@@ -210,6 +210,28 @@ const JOB_QUALIFIED_COLUMNS: &str = "job.id, job.kind, job.payload, job.state, j
 /// oversized payload, or secret-shaped content, else
 /// [`JobError::StorageFailed`]. Reasons are static.
 pub async fn enqueue(pool: &sqlx::PgPool, job: NewJob) -> Result<Job, JobError> {
+    let mut tx = pool.begin().await.map_err(|_| JobError::StorageFailed)?;
+    let job = enqueue_in_tx(&mut tx, job).await?;
+    tx.commit().await.map_err(|_| JobError::StorageFailed)?;
+    Ok(job)
+}
+
+/// Enqueue one job inside the caller's transaction.
+///
+/// A scheduled consequence belongs to the business fact that produces it:
+/// the job row commits with that fact, so a committed request always
+/// carries its scheduled work and a rolled-back fact leaves nothing
+/// behind.
+///
+/// # Errors
+///
+/// Returns [`JobError::InvalidJob`] for a malformed kind, zero budget,
+/// oversized payload, or secret-shaped content, else
+/// [`JobError::StorageFailed`]. Reasons are static.
+pub async fn enqueue_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    job: NewJob,
+) -> Result<Job, JobError> {
     if job.kind.trim().is_empty()
         || job.kind.chars().count() > 64
         || job.max_attempts < 1
@@ -225,7 +247,7 @@ pub async fn enqueue(pool: &sqlx::PgPool, job: NewJob) -> Result<Job, JobError> 
     .bind(&job.kind)
     .bind(&job.payload)
     .bind(i64::from(job.max_attempts))
-    .fetch_one(pool)
+    .fetch_one(&mut **tx)
     .await
     .map_err(|_| JobError::StorageFailed)?;
     read_job(&row)
@@ -400,6 +422,25 @@ pub async fn get_job(pool: &sqlx::PgPool, job_id: uuid::Uuid) -> Result<Option<J
     ))
     .bind(job_id)
     .fetch_optional(pool)
+    .await
+    .map_err(|_| JobError::StorageFailed)?;
+    row.map(|row| read_job(&row)).transpose()
+}
+
+/// One job by id, inside the caller's transaction.
+///
+/// # Errors
+///
+/// Returns [`JobError::StorageFailed`] on database failure only.
+pub async fn get_job_in_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    job_id: uuid::Uuid,
+) -> Result<Option<Job>, JobError> {
+    let row: Option<sqlx::postgres::PgRow> = sqlx::query(&format!(
+        "SELECT {JOB_COLUMNS} FROM background_jobs WHERE id = $1"
+    ))
+    .bind(job_id)
+    .fetch_optional(&mut **tx)
     .await
     .map_err(|_| JobError::StorageFailed)?;
     row.map(|row| read_job(&row)).transpose()

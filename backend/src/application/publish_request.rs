@@ -349,6 +349,12 @@ pub async fn publish_request(
     start_cycle(&mut tx, draft_id, 1, started_at, deadline)
         .await
         .map_err(|_| PublishError::StorageFailed)?;
+    // The cycle's expiry sweep belongs to this publication: it commits with
+    // it, so a live cycle always carries the work that ends it, and a
+    // refused publication schedules nothing.
+    crate::operations::jobs::expire_requests::enqueue_expiry_in_tx(&mut tx, draft_id, 1, deadline)
+        .await
+        .map_err(|_| PublishError::StorageFailed)?;
     // The first revision is current from birth: promotion and activation are
     // one atomic flip, so current requirements and history never disagree.
     let activated: Option<i32> = sqlx::query_scalar(
