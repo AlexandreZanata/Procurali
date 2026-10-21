@@ -1,7 +1,7 @@
 # Project status
 
-**Updated:** October 13, 2026  
-**Phase:** Implementation verification on the construction branch `codex/backend-mvp` (mandatory phases P00–P19 implemented; optional P20 Redis deferred)  
+**Updated:** October 20, 2026  
+**Phase:** Implementation verification on the construction branch `codex/backend-mvp` (mandatory phases P00–P19 and P21 implemented; optional P20 Redis deferred)  
 **Business baseline:** Recommended version 1.1
 
 ## Available artifacts
@@ -19,7 +19,10 @@ implemented on the construction branch and verified from tracked files
 only: full tier registry (unit, integration on real PostgreSQL, api,
 concurrency, privacy, web component, e2e over real HTTP, ops, bounded
 load, critical-mutations), plus restart/backup/restore/smoke proofs and
-the release gate. See [release status](../engineering/release-status.md)
+the release gate. The application also serves itself: one production
+composition root merges every business boundary into one router, and the
+binary serves it over real HTTP with typed startup refusals, pool-backed
+readiness, and a graceful drain. See [release status](../engineering/release-status.md)
 for the tested revision and results, and the [root README](../../README.md)
 for checkout, check, and operation commands.
 
@@ -27,10 +30,11 @@ Specifications describe intended behavior; implementation evidence lives
 in the verification tiers above, not in documentation alone.
 
 Known construction follow-ups (not launch blockers for local
-correctness): the serving-binary merge (production router composition),
-the permanent e2e harness seeder, renewal-path duplicate enforcement,
-and test-cleanup hardening. Mobile apps, Radar Pro, subscriptions, and
-paid passes remain future work.
+correctness): the permanent e2e harness seeder, renewal-path duplicate
+enforcement, test-cleanup hardening, the live phone-verification
+transport, and the scheduling of background jobs from business flows.
+Mobile apps, Radar Pro, subscriptions, and paid passes remain future
+work.
 
 ## Open operational choices before public launch
 

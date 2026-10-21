@@ -52,6 +52,11 @@ from tracked files only — no private workspace is needed:
   `scripts/restore-test.sh` (backup and restore proof),
   `scripts/deploy.sh` (disposable deploy/rollback), `scripts/load-test.sh`
   (bounded load + correctness).
+- Serving the application: `cargo run --bin procurali-backend` (validated
+  settings, migrated schema, real HTTP; see
+  `docs/engineering/local-operation.md`) and
+  `scripts/build-artifact.sh --serve-smoke` (the built image serving real
+  traffic against a disposable database).
 - Release state: `docs/engineering/release-status.md` (tested revision,
   tier results, pending live gates); procedures in `infra/runbooks/`.
 

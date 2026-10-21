@@ -2,6 +2,12 @@
 
 This records significant documentation and business-baseline changes. It is not evidence of application implementation or a substitute for the canonical topic text.
 
+## October 20, 2026 — The served application on `codex/backend-mvp`
+
+- Implemented the serving-binary follow-up recorded since P18-T01: one production composition root merges every HTTP boundary into one router under the production body/timeout bounds, the privacy headers, and the stable unknown-route refusal; the binary serves it over real HTTP with validated settings, a bounded pool, schema agreement, pool-backed readiness, typed value-free startup refusals, and a graceful SIGTERM drain. No business rule changed and PostgreSQL remains the only authority.
+- Proved the serving behavior on disposable stacks only: the served binary answers liveness, readiness, public traffic, and a refused cookie-less staff read; the built image answers the same probes against a disposable database (`scripts/build-artifact.sh --serve-smoke`) and reports a healthy container; the operational smoke flow passes against a served target.
+- Recorded what is not claimed: no live phone verification, staging HTTPS, off-host restore, or public launch (all pending on owner-supplied inputs); the live Verify HTTPS transport is still absent, so the served binary refuses the live provider instead of pretending a proof was delivered; business flows still do not schedule background jobs; the permanent e2e harness seeder, renewal-path duplicate enforcement, and test-cleanup hardening remain open.
+
 ## October 13, 2026 — Backend MVP construction delivered on `codex/backend-mvp`
 
 - Implemented and verified the mandatory free MVP (Request → Offers → Contact → Outcome with safety and administration) as a Rust/Axum/PostgreSQL backend, reproducible one-host infrastructure, and a minimal TypeScript web interface; verification ran from tracked files only (unit, integration on real PostgreSQL, api, concurrency, privacy, web component, e2e over real HTTP, ops, bounded load, critical-mutations, plus restart/backup/restore/smoke proofs and the release gate).
