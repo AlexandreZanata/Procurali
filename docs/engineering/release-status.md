@@ -57,14 +57,17 @@ deploying any environment is a separate, unauthorized-by-default step.
   outcome prompts are implemented and proven at the application level, but
   nothing schedules them yet, so the served worker currently has no work
   to claim.
-- The integration tier shows load-sensitive flakes in a few race suites
-  (timing assertions and suite database cleanup) on this workstation. The
-  same failures reproduce on the unmodified baseline revision — measured on
-  the tested head and on `f620018`: `postgres_atomicity` failed 3 of 6 and
-  4 of 6 consecutive runs respectively, and `postgres_jobs` failed 2 of 6
-  and 1 of 6. The suites pass in isolation and the tier passes when the
-  machine is quiet. This belongs to the recorded test-cleanup and
-  hardening follow-up.
+- The api and integration tiers show load-sensitive flakes in several race
+  suites (timing assertions and suite database cleanup) on this
+  workstation. The same failures reproduce on the unmodified baseline
+  revision — measured on the tested head and on `f620018`: the api tier
+  failed 1 target on the tested head and 3 and 4 targets on the baseline,
+  with a different suite each time (`api_accounts`, `api_phone_change`,
+  `api_moderation_accounts`, `api_offer_withdrawal`, `api_reputation`),
+  while `postgres_atomicity` failed 3 of 6 and 4 of 6 consecutive runs
+  respectively. The suites pass in isolation and the tiers pass on a quiet
+  machine. This belongs to the recorded test-cleanup and hardening
+  follow-up.
 - Nothing serving production traffic exists.
 
 ## Live gates (all pending; each names its missing input)
