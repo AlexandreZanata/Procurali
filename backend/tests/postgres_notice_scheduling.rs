@@ -19,13 +19,16 @@
 mod database;
 
 use database::TestDatabase;
+use procurali_backend::application::close_request::{close_request, BuyerOutcome, OutcomeSource};
 use procurali_backend::application::publish_request::{publish_request, PublishError};
 use procurali_backend::application::renew_request::{renew_request, RenewalConfirmation};
 use procurali_backend::application::request_drafts::{create_draft, DraftInput};
 use procurali_backend::application::start_contact::{start_contact, ContactInput};
 use procurali_backend::application::submit_offer::{submit_offer, OfferInput};
 use procurali_backend::operations::jobs::expire_requests::EXPIRY_JOB_KIND;
-use procurali_backend::operations::jobs::outcome_prompts::OUTCOME_PROMPT_KIND;
+use procurali_backend::operations::jobs::outcome_prompts::{
+    process_prompt, schedule_expiry_prompt, PromptOutcome, OUTCOME_PROMPT_KIND,
+};
 use procurali_backend::persistence::catalogs::{upsert_city, upsert_region};
 use procurali_backend::persistence::users::{create_user, NewUser, PhoneKeys};
 
@@ -393,6 +396,51 @@ async fn scheduled_payloads_carry_no_private_material() {
             "a scheduled payload carries no destination or secret: {payload}"
         );
     }
+
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn a_terminal_request_is_never_prompted() {
+    let db = TestDatabase::create("p23t01_terminal")
+        .await
+        .expect("disposable database allocates");
+    seed_catalog(db.pool()).await;
+    let author = seed_active(db.pool(), "Terminal Owner", "+55 11 90000-0709").await;
+    let draft_id = create_demand(db.pool(), author, "Cooker").await;
+    let request_id = publish_open(db.pool(), author, draft_id).await;
+
+    // The owner closes the request: a closed request never prompts.
+    close_request(
+        db.pool(),
+        author,
+        request_id,
+        BuyerOutcome::Found(OutcomeSource::Elsewhere),
+    )
+    .await
+    .expect("the owner closes the request");
+
+    let job = schedule_expiry_prompt(db.pool(), request_id, 1, chrono::Utc::now())
+        .await
+        .expect("terminal schedule probes")
+        .expect("the terminal schedule answers");
+    let outcome = process_prompt(db.pool(), &job)
+        .await
+        .expect("the prompt stands down");
+    assert_eq!(
+        outcome,
+        PromptOutcome::SkippedTerminal,
+        "a closed request is never asked again"
+    );
+    let prompts: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM notices
+         WHERE resource_kind = 'request' AND resource_id = $1 AND kind = 'outcome.prompt'",
+    )
+    .bind(request_id)
+    .fetch_one(db.pool())
+    .await
+    .expect("notices read");
+    assert_eq!(prompts, 0, "a closed request carries no prompt notice");
 
     db.cleanup().await.expect("suite cleans up");
 }

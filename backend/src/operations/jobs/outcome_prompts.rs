@@ -238,7 +238,7 @@ async fn schedule_prompt(
 pub async fn process_prompt(pool: &sqlx::PgPool, job: &Job) -> Result<PromptOutcome, PromptError> {
     // The trigger selected scheduling only; processing keys on the live
     // row, so simultaneous triggers converge instead of duplicating.
-    let (request_id, _cycle_number, _trigger) =
+    let (request_id, cycle_number, _trigger) =
         parse_prompt_payload(&job.payload).ok_or(PromptError::InvalidJob)?;
     let mut tx = pool.begin().await.map_err(|_| PromptError::StorageFailed)?;
     // Lock the demand row first: concurrent prompt workers serialize here,
@@ -270,14 +270,19 @@ pub async fn process_prompt(pool: &sqlx::PgPool, job: &Job) -> Result<PromptOutc
             .map_err(|_| PromptError::StorageFailed)?;
         return Ok(PromptOutcome::AlreadyPrompted);
     }
-    // Anchor the notice on the latest request fact for a stable recipient
-    // trail; without any fact yet, the row stands on its own history.
+    // Anchor the notice on the fact that opened the cycle, so one fact
+    // notifies its recipient once: the cycle's own start never carries
+    // another notice, and the expiry fact keeps its own. Without that fact
+    // the row cannot stand on its own history.
     let anchor: Option<uuid::Uuid> = sqlx::query_scalar(
         "SELECT id FROM business_events
          WHERE resource_kind = 'request' AND resource_id = $1
-         ORDER BY occurred_at DESC, id DESC LIMIT 1",
+           AND kind IN ('request.published', 'request.renewed')
+           AND cycle = $2
+         ORDER BY occurred_at, id LIMIT 1",
     )
     .bind(request_id)
+    .bind(cycle_number)
     .fetch_optional(&mut *tx)
     .await
     .map_err(|_| PromptError::StorageFailed)?;

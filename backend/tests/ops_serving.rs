@@ -48,11 +48,21 @@ fn free_port() -> u16 {
 
 /// One HTTP GET over plain loopback TCP. Returns the status line and body.
 fn http_get(address: &str, path: &str) -> (u16, String) {
+    http_get_with_cookie(address, path, None)
+}
+
+/// One GET over plain loopback TCP, optionally carrying a session cookie.
+fn http_get_with_cookie(address: &str, path: &str, cookie: Option<&str>) -> (u16, String) {
     let mut stream = std::net::TcpStream::connect(address).expect("the server accepts connections");
     stream
         .set_read_timeout(Some(Duration::from_secs(10)))
         .expect("the read timeout applies");
-    let request = format!("GET {path} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n");
+    let request = match cookie {
+        Some(cookie) => format!(
+            "GET {path} HTTP/1.1\r\nHost: {address}\r\nCookie: {cookie}\r\nConnection: close\r\n\r\n"
+        ),
+        None => format!("GET {path} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n"),
+    };
     stream
         .write_all(request.as_bytes())
         .expect("the request is written");
@@ -78,6 +88,65 @@ fn http_get(address: &str, path: &str) -> (u16, String) {
         .expect("a status line");
     let body = text.split("\r\n\r\n").nth(1).unwrap_or_default().to_owned();
     (status, body)
+}
+
+/// One JSON POST over plain loopback TCP. Returns the status, the body, and
+/// the session cookie the server issued, if any.
+fn http_post_json(
+    address: &str,
+    path: &str,
+    body: &str,
+    cookie: Option<&str>,
+) -> (u16, String, String) {
+    let mut stream = std::net::TcpStream::connect(address).expect("the server accepts connections");
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .expect("the read timeout applies");
+    let mut request = format!(
+        "POST {path} HTTP/1.1\r\nHost: {address}\r\nOrigin: http://{address}\r\n\
+         Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    );
+    if let Some(cookie) = cookie {
+        request = format!(
+            "POST {path} HTTP/1.1\r\nHost: {address}\r\nOrigin: http://{address}\r\n\
+             Content-Type: application/json\r\nContent-Length: {}\r\nCookie: {cookie}\r\n\
+             Connection: close\r\n\r\n{body}",
+            body.len()
+        );
+    }
+    stream
+        .write_all(request.as_bytes())
+        .expect("the request is written");
+    let mut response = Vec::new();
+    let mut buffer = [0_u8; 1024];
+    loop {
+        match stream.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(read) => {
+                response.extend_from_slice(&buffer[..read]);
+                if response.len() > 65_536 {
+                    break;
+                }
+            }
+            Err(_) => break,
+        }
+    }
+    let text = String::from_utf8_lossy(&response).to_string();
+    let status = text
+        .split_whitespace()
+        .nth(1)
+        .and_then(|code| code.parse::<u16>().ok())
+        .expect("a status line");
+    let set_cookie = text
+        .split("\r\n")
+        .find_map(|line| {
+            line.strip_prefix("set-cookie: ")
+                .map(|value| value.split(';').next().unwrap_or_default().to_owned())
+        })
+        .unwrap_or_default();
+    let body = text.split("\r\n\r\n").nth(1).unwrap_or_default().to_owned();
+    (status, body, set_cookie)
 }
 
 /// Start the served binary against one disposable database.
@@ -290,4 +359,225 @@ fn the_health_check_reports_the_served_state() {
         !output.status.success(),
         "an unreachable server is not reported healthy"
     );
+}
+
+/// The served application delivers the expiry notice and the prompt.
+#[test]
+fn the_served_application_delivers_the_owner_notices() {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("the test runtime builds");
+    let db = runtime.block_on(async {
+        TestDatabase::create("p23t02_notices")
+            .await
+            .expect("disposable database allocates")
+    });
+
+    // The public catalogs the publication needs.
+    runtime.block_on(async {
+        let mut tx = db.pool().begin().await.expect("transaction begins");
+        procurali_backend::persistence::catalogs::upsert_city(
+            &mut tx, "campinas", "Campinas", true,
+        )
+        .await
+        .expect("fixture city stores");
+        procurali_backend::persistence::catalogs::upsert_region(
+            &mut tx, "campinas", "centro", "Centro",
+        )
+        .await
+        .expect("fixture region stores");
+        tx.commit().await.expect("fixture catalogs commit");
+    });
+
+    let port = free_port();
+    let address = format!("127.0.0.1:{port}");
+    let mut child = start_server(&url_for(db.name()), port);
+    await_ready(&address);
+
+    // The owner registers, proves control, and logs in over real HTTP.
+    let phone = "+55 11 90000-0311";
+    let (status, _body, _cookie) = http_post_json(
+        &address,
+        "/api/v1/accounts",
+        &format!(
+            "{{\"display_name\":\"Notice Owner\",\"phone\":\"{phone}\",\"city\":\"Campinas\",\"region\":\"SP\",\"policy_version\":\"v1\"}}"
+        ),
+        None,
+    );
+    assert_eq!(status, 201, "the owner registers over real HTTP");
+    let (status, _body, _cookie) = http_post_json(
+        &address,
+        "/api/v1/accounts/challenges",
+        &format!("{{\"phone\":\"{phone}\"}}"),
+        None,
+    );
+    assert_eq!(status, 202, "the challenge is accepted");
+    let (status, _body, _cookie) = http_post_json(
+        &address,
+        "/api/v1/accounts/challenges/confirmations",
+        &format!("{{\"phone\":\"{phone}\",\"code\":\"{FAKE_CODE}\"}}"),
+        None,
+    );
+    assert_eq!(status, 200, "the proof activates the account");
+    let (status, _body, cookie) = http_post_json(
+        &address,
+        "/api/v1/sessions",
+        &format!("{{\"phone\":\"{phone}\",\"code\":\"{FAKE_CODE}\"}}"),
+        None,
+    );
+    assert_eq!(status, 200, "the owner logs in");
+    assert!(!cookie.is_empty(), "the login issues a session cookie");
+
+    // The owner publishes one demand over real HTTP.
+    let (status, body, _cookie) = http_post_json(
+        &address,
+        "/api/v1/requests/drafts",
+        &serde_json::json!({
+            "title": "Served Expiry Fridge",
+            "category_code": "home_appliances",
+            "budget": "600.00",
+            "condition": "either",
+            "city_code": "campinas",
+            "region_code": "centro",
+        })
+        .to_string(),
+        Some(&cookie),
+    );
+    assert_eq!(status, 201, "the draft is saved");
+    let draft_id = serde_json::from_str::<serde_json::Value>(&body)
+        .expect("the draft receipt parses")["id"]
+        .as_str()
+        .expect("the draft receipt carries an id")
+        .to_owned();
+    let (status, body, _cookie) = http_post_json(
+        &address,
+        &format!("/api/v1/requests/drafts/{draft_id}/publication"),
+        "{}",
+        Some(&cookie),
+    );
+    assert_eq!(status, 201, "the demand publishes");
+    let request_id = serde_json::from_str::<serde_json::Value>(&body).expect("the receipt parses")
+        ["id"]
+        .as_str()
+        .expect("the receipt carries an id")
+        .to_owned();
+
+    // The cycle is moved into the past and the scheduled sweep becomes due:
+    // the served worker still performs the real transition.
+    runtime.block_on(async {
+        sqlx::query(
+            "UPDATE request_cycles SET started_at = now() - interval '8 days',
+                    deadline = now() - interval '1 hour'
+             WHERE request_id = $1",
+        )
+        .bind(uuid::Uuid::parse_str(&request_id).expect("the request id parses"))
+        .execute(db.pool())
+        .await
+        .expect("the elapsed cycle applies");
+        sqlx::query(
+            "UPDATE background_jobs SET not_before = now() - interval '1 minute'
+             WHERE kind = 'request.expire' AND payload->>'request_id' = $1",
+        )
+        .bind(&request_id)
+        .execute(db.pool())
+        .await
+        .expect("the sweep becomes due");
+    });
+
+    // The owner reads the notices the served worker produced.
+    let deadline = Instant::now() + Duration::from_secs(60);
+    let mut kinds: Vec<String> = Vec::new();
+    while Instant::now() < deadline {
+        let (status, body) = http_get_with_cookie(&address, "/api/v1/notices", Some(&cookie));
+        assert_eq!(status, 200, "the owner reads their notices");
+        let notices =
+            serde_json::from_str::<serde_json::Value>(&body).expect("the notice list parses");
+        kinds = notices["notices"]
+            .as_array()
+            .expect("the notice list is an array")
+            .iter()
+            .map(|notice| notice["kind"].as_str().unwrap_or_default().to_owned())
+            .collect();
+        if kinds.iter().any(|kind| kind == "request.expired")
+            && kinds.iter().any(|kind| kind == "outcome.prompt")
+        {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+    assert!(
+        kinds.iter().any(|kind| kind == "request.expired"),
+        "the owner receives the expiry notice: {kinds:?}"
+    );
+    if !kinds.iter().any(|kind| kind == "outcome.prompt") {
+        let jobs: Vec<(String, String, String, i32, Option<String>)> = runtime.block_on(async {
+            sqlx::query_as(
+                "SELECT kind, state, not_before::text, attempts, last_error
+                 FROM background_jobs WHERE payload->>'request_id' = $1
+                 ORDER BY created_at",
+            )
+            .bind(&request_id)
+            .fetch_all(db.pool())
+            .await
+            .expect("jobs read")
+        });
+        panic!("the owner receives the outcome prompt: {kinds:?} / jobs: {jobs:?}");
+    }
+    let (_status, body) = http_get_with_cookie(&address, "/api/v1/notices", Some(&cookie));
+    assert!(
+        !body.contains("+55"),
+        "a notice body carries no destination"
+    );
+
+    // The request now reads as expired for its owner.
+    let (status, body) = http_get_with_cookie(
+        &address,
+        &format!("/api/v1/requests/{request_id}"),
+        Some(&cookie),
+    );
+    assert_eq!(status, 200, "the owner reads the expired request");
+    let detail = serde_json::from_str::<serde_json::Value>(&body).expect("the detail parses");
+    assert_eq!(
+        detail["state"], "expired",
+        "the owner reads the expired request"
+    );
+    assert_eq!(detail["expired"], true);
+
+    // A repeated sweep writes nothing further: a duplicated late job for
+    // the same cycle observes the settled row and adds no notice.
+    runtime.block_on(async {
+        sqlx::query(
+            "INSERT INTO background_jobs (kind, payload, max_attempts, not_before)
+             VALUES ('request.expire', jsonb_build_object('request_id', $1::text, 'cycle', 1), 3,
+                     now() - interval '1 minute')",
+        )
+        .bind(&request_id)
+        .execute(db.pool())
+        .await
+        .expect("the duplicated sweep is enqueued");
+    });
+    std::thread::sleep(Duration::from_secs(12));
+    let (status, body) = http_get_with_cookie(&address, "/api/v1/notices", Some(&cookie));
+    assert_eq!(status, 200);
+    let notices = serde_json::from_str::<serde_json::Value>(&body).expect("the notice list parses");
+    let total = notices["total"].as_i64().expect("the notice total reads");
+    assert_eq!(
+        total, 2,
+        "the repeated sweep writes no further notice: {notices}"
+    );
+
+    let terminated = Command::new("kill")
+        .arg("-TERM")
+        .arg(child.id().to_string())
+        .status()
+        .expect("the termination signal is sent");
+    assert!(terminated.success());
+    let status = runtime
+        .block_on(async { tokio::task::spawn_blocking(move || child.wait()).await })
+        .expect("the wait task joins")
+        .expect("the process exits");
+    assert!(status.success(), "the served application exits cleanly");
+
+    runtime.block_on(db.cleanup()).expect("suite cleans up");
 }

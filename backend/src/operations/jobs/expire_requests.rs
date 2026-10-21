@@ -26,6 +26,7 @@
 //! touches offer rows that do not exist yet.
 
 use crate::application::request_eligibility::{expire_if_elapsed, ExpiryOutcome};
+use crate::operations::jobs::outcome_prompts::schedule_expiry_prompt_in_tx;
 use crate::operations::worker::{enqueue_in_tx, get_job_in_tx, Job, NewJob};
 use crate::persistence::notices::{record as record_notice, NewNotice, NoticeError};
 use serde_json::{json, Value};
@@ -209,8 +210,13 @@ pub async fn process_expiry(
         .map_err(|_| ExpireJobError::StorageFailed)?;
     let mut notice_created = false;
     let mut event_id = None;
+    let mut duplicate_notice = false;
+    let mut expired_cycle: Option<i32> = None;
+    let mut expired_at: Option<chrono::DateTime<chrono::Utc>> = None;
     if let Some((found_id, effective_at, cycle, author_id)) = event {
         event_id = Some(found_id);
+        expired_cycle = Some(cycle);
+        expired_at = Some(effective_at);
         sqlx::query(
             "UPDATE request_cycles SET ended_at = $3
              WHERE request_id = $1 AND cycle_number = $2 AND ended_at IS NULL",
@@ -235,7 +241,10 @@ pub async fn process_expiry(
         .await
         {
             Ok(_) => notice_created = true,
-            Err(NoticeError::Duplicate) => {}
+            // The unique violation ends this transaction: the standing notice
+            // already answered the owner, and nothing else may be written
+            // here. The prompt scheduled with the first notice stands.
+            Err(NoticeError::Duplicate) => duplicate_notice = true,
             Err(_) => {
                 tx.rollback()
                     .await
@@ -243,6 +252,26 @@ pub async fn process_expiry(
                 return Err(ExpireJobError::StorageFailed);
             }
         }
+    }
+    if duplicate_notice {
+        tx.rollback()
+            .await
+            .map_err(|_| ExpireJobError::StorageFailed)?;
+        let mut report = current_report(pool, request_id).await?;
+        report.transitioned = outcome == ExpiryOutcome::Transitioned;
+        report.notice_created = false;
+        report.event_id = event_id;
+        return Ok(report);
+    }
+    // The renewal/outcome prompt belongs to this expiry: it commits with
+    // the expiry fact, so an expired cycle always carries the question its
+    // owner has to answer. A prompt already pending for the cycle (the
+    // post-contact one) is reused instead of duplicated, and a prompt
+    // already answered stands down.
+    if let (Some(cycle), Some(effective_at)) = (expired_cycle, expired_at) {
+        schedule_expiry_prompt_in_tx(&mut tx, request_id, cycle, effective_at)
+            .await
+            .map_err(|_| ExpireJobError::StorageFailed)?;
     }
     tx.commit()
         .await
