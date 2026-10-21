@@ -56,10 +56,13 @@ deploying any environment is a separate, unauthorized-by-default step.
   served binary refuses `PHONE_PROVIDER=twilio` instead of pretending a
   proof was delivered. Production startup therefore still waits on that
   transport and on the authorized staging inputs.
-- Business flows still do not enqueue background jobs: expiry notices and
-  outcome prompts are implemented and proven at the application level, but
-  nothing schedules them yet, so the served worker currently has no work
-  to claim.
+- The owner notices now reach the owner: a publication or renewal schedules
+  its cycle's expiry sweep, the first contact of a cycle schedules the
+  outcome prompt, and the expiry sweep schedules the renewal/outcome prompt.
+  The served worker processes the due jobs, and the owner reads the expiry
+  notice and the prompt over real HTTP. One job commits with the business
+  fact that schedules it, and the prompt notice stands on the cycle's own
+  fact so one fact notifies its recipient once.
 - The load-sensitive failures the api and integration tiers showed before
   are resolved on this revision: a restricted seller now refuses contact
   with the documented account-side meaning (so the ban-versus-contact race

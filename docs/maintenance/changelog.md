@@ -2,6 +2,12 @@
 
 This records significant documentation and business-baseline changes. It is not evidence of application implementation or a substitute for the canonical topic text.
 
+## October 21, 2026 — The owner notices reach the owner on `codex/backend-mvp`
+
+- Wired the background jobs into the business flows: a publication or a renewal schedules its cycle's expiry sweep, the first contact of a cycle schedules the outcome prompt, and the expiry sweep schedules the renewal/outcome prompt. The job row commits with the business fact that schedules it, so a live cycle always carries the work that ends it and a refused mutation schedules nothing.
+- Closed the gap that made the served worker idle: the running application now records the expiry, tells the owner, and asks the one question their cycle owes them. The prompt notice stands on the cycle's own fact, so one fact notifies its recipient once and the expiry notice keeps its own; a repeated sweep writes nothing further.
+- Proved the chain over the served application: the owner registers, publishes, and reads the expiry notice and the outcome prompt over real HTTP after the cycle elapses.
+
 ## October 21, 2026 — The permanent e2e harness on `codex/backend-mvp`
 
 - Gave the browser tier a permanent harness: a seeder that reaches the harness state through the real business operations (registration and proof flow, audited staff grant, published demand, withdrawn offer, suspended demand) and writes the fixtures file the specs read, plus one script that starts a disposable database, applies the tracked migrations, serves the real application over it, seeds, runs the browser journey, and tears the stack down. The harness refuses any database that is not explicitly disposable and loopback.
