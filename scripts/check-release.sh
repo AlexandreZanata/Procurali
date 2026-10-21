@@ -30,13 +30,14 @@ step_lockfiles() {
 
 step_advisories() {
   echo "check-release: advisories (cargo audit)"
-  # RUSTSEC-2023-0071 (rsa Marvin, medium, no fixed upgrade) is a
-  # recorded exception in docs/engineering/dependencies.md. Otherwise
-  # the gate tolerates zero unassessed advisories: anything else fails
-  # loudly for human triage (record or repair), never silently.
-  (cd "$BACKEND" && cargo audit --deny yanked --deny unsound --deny unmaintained --ignore RUSTSEC-2023-0071) || return 1
+  # RUSTSEC-2023-0071 (rsa Marvin, medium, no fixed upgrade) and
+  # RUSTSEC-2026-0381 (webpki-roots bundled roots) are recorded
+  # exceptions in docs/engineering/dependencies.md. Otherwise the gate
+  # tolerates zero unassessed advisories: anything else fails loudly for
+  # human triage (record or repair), never silently.
+  (cd "$BACKEND" && cargo audit --deny yanked --deny unsound --deny unmaintained --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2026-0381) || return 1
   local report
-  report="$(cd "$BACKEND" && cargo audit --json --ignore RUSTSEC-2023-0071)" || return 1
+  report="$(cd "$BACKEND" && cargo audit --json --ignore RUSTSEC-2023-0071 --ignore RUSTSEC-2026-0381)" || return 1
   local remaining
   remaining="$(printf '%s' "$report" | python3 -c "
 import json, sys

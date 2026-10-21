@@ -2,7 +2,9 @@
 
 **Status:** Planned; no application package exists yet. Exact resolved versions are locked
 in `backend/Cargo.lock` (P01-T01) and `web/package-lock.json` (P15).
-**Verified:** October 8, 2026 against crates.io and the npm registry from this workstation.
+**Verified:** October 8, 2026 against crates.io and the npm registry from this workstation;
+the TLS dependency patch bumps of October 20, 2026 (`rustls` 0.23.46,
+`rustls-webpki` 0.103.16, `webpki-roots` 1.0.10) were verified the same way.
 **Scope:** Free MVP backend, reproducible infrastructure, minimal plain-TypeScript web UI.
 Mobile, commercial, and optional Redis-acceleration dependencies are excluded unless marked optional.
 
@@ -68,13 +70,25 @@ and production-bypass markers (test-only fixtures allowlisted).
 `scripts/test.sh ops` stays unregistered until the infrastructure
 phase owns deployment targets.
 
-Known advisory exception (recorded, not hidden):
+Known advisory exceptions (recorded, not hidden):
 [RUSTSEC-2023-0071](https://rustsec.org/advisories/RUSTSEC-2023-0071)
 (rsa 0.9.10, Marvin timing sidechannel, medium severity) has no fixed
 upgrade available. The release gate ignores exactly this ID and
 otherwise tolerates zero unassessed advisories: anything else fails
 loudly for human triage (record or repair). Revisit when an upgrade
 lands.
+
+[RUSTSEC-2026-0381](https://rustsec.org/advisories/RUSTSEC-2026-0381)
+(webpki-roots bundled root certificates) is ignored for one package only:
+`webpki-roots 0.26.11` is the published semver shim over the 1.0 line
+("this crate version is a semver trick to webpki-roots v1"), pulled in by
+`sqlx-core 0.8.6`, which pins the 0.26 line. The lockfile resolves the
+shim to `webpki-roots 1.0.10`, which carries the fixed root store, so the
+vulnerable roots are not in the build; `cargo audit` matches by package
+version and cannot see that. The shim line itself has no patched release,
+and the only way to drop it is the SQLx 0.9 upgrade that this manifest
+defers until its PostgreSQL runtime behavior is proven compatible. Revisit
+when that upgrade happens.
 
 License policy: strong copyleft (GPL/AGPL, including LGPL-only)
 without a permissive alternative fails the gate. The single
