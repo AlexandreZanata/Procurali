@@ -135,6 +135,19 @@ impl TestDatabase {
         let admin = PgPool::connect(&self.admin_url)
             .await
             .map_err(|_| DbError::CleanupFailed("admin connect"))?;
+        // A connection that is still closing keeps the database busy, and
+        // PostgreSQL refuses to drop a database with live sessions. The
+        // suite owns this disposable database exclusively, so its own
+        // leftover sessions are terminated before the drop; other suites
+        // keep their own databases untouched.
+        sqlx::query(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity
+             WHERE datname = $1 AND pid <> pg_backend_pid()",
+        )
+        .bind(&self.name)
+        .execute(&admin)
+        .await
+        .map_err(|_| DbError::CleanupFailed("terminate sessions"))?;
         sqlx::query(&format!("DROP DATABASE \"{}\"", self.name))
             .execute(&admin)
             .await

@@ -181,12 +181,26 @@ async fn uncommitted_writes_stay_invisible_until_commit() {
                 .await
                 .expect("reader reads");
             barrier.wait().await;
-            // Wait past the commit, then read the settled state.
-            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-            let after: i64 = sqlx::query_scalar("SELECT count(*) FROM foundation_ids")
-                .fetch_one(&pool)
-                .await
-                .expect("reader re-reads");
+            // Wait past the commit, then read the settled state. The
+            // commit is a real transaction against a shared database, so
+            // the wait is bounded and observed instead of a fixed sleep:
+            // the dirty read above is the invariant, and the settled row
+            // must become visible exactly once.
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+            let after = loop {
+                let settled: i64 = sqlx::query_scalar("SELECT count(*) FROM foundation_ids")
+                    .fetch_one(&pool)
+                    .await
+                    .expect("reader re-reads");
+                if settled > 0 {
+                    break settled;
+                }
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "the committed row never became visible"
+                );
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            };
             (before, after)
         }
     };
