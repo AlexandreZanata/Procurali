@@ -131,7 +131,7 @@ async fn guard(
     match verdict {
         Ok(()) => Ok(()),
         Err(AttemptError::Abort(reason)) => Err(reason),
-        Err(AttemptError::Db(_)) => panic!("probe storage failed"),
+        Err(AttemptError::Db(_) | AttemptError::Conflict) => panic!("probe storage failed"),
     }
 }
 
@@ -146,7 +146,7 @@ async fn matching(
     match found {
         Ok(found) => found,
         Err(AttemptError::Abort(_)) => panic!("probe refusal impossible"),
-        Err(AttemptError::Db(_)) => panic!("probe storage failed"),
+        Err(AttemptError::Db(_) | AttemptError::Conflict) => panic!("probe storage failed"),
     }
 }
 

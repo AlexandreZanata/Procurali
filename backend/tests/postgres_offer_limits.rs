@@ -143,7 +143,7 @@ async fn guard(
     match verdict {
         Ok(()) => Ok(()),
         Err(AttemptError::Abort(reason)) => Err(reason),
-        Err(AttemptError::Db(_)) => panic!("probe storage failed"),
+        Err(AttemptError::Db(_) | AttemptError::Conflict) => panic!("probe storage failed"),
     }
 }
 
@@ -159,7 +159,7 @@ async fn counted(
     match count {
         Ok(count) => count,
         Err(AttemptError::Abort(_)) => panic!("probe refusal impossible"),
-        Err(AttemptError::Db(_)) => panic!("probe storage failed"),
+        Err(AttemptError::Db(_) | AttemptError::Conflict) => panic!("probe storage failed"),
     }
 }
 
@@ -229,10 +229,18 @@ async fn eleventh_successful_submission_is_denied() {
         "known suite identity in the database name"
     );
     seed_catalog(db.pool()).await;
-    let author = seed_active(db.pool(), "Quota Owner", "+55 11 90000-0131").await;
     let seller = seed_active(db.pool(), "Quota Seller", "+55 11 90000-0132").await;
     let now = chrono::Utc::now();
     for index in 0..10 {
+        // One buyer holds at most three open requests (P24-T01), so the
+        // demands come from different buyers: the quota under test is the
+        // seller's submission allowance.
+        let author = seed_active(
+            db.pool(),
+            &format!("Quota Owner {index}"),
+            &format!("+55 11 90100-0{:02}", 10 + index),
+        )
+        .await;
         let request_id = publish_open(db.pool(), author, &format!("Quota Demand {index}")).await;
         submit_open(db.pool(), seller, request_id).await;
     }
@@ -240,7 +248,8 @@ async fn eleventh_successful_submission_is_denied() {
 
     // Failed submissions consume nothing: over-budget and malformed terms
     // refuse through the real operation with the count untouched.
-    let extra = publish_open(db.pool(), author, "Quota Extra").await;
+    let extra_author = seed_active(db.pool(), "Quota Extra Owner", "+55 11 90000-0141").await;
+    let extra = publish_open(db.pool(), extra_author, "Quota Extra").await;
     assert!(submit_offer(
         db.pool(),
         seller,
@@ -291,14 +300,24 @@ async fn concurrent_final_quota_contenders_cannot_exceed() {
         "known suite identity in the database name"
     );
     seed_catalog(db.pool()).await;
-    let author = seed_active(db.pool(), "Race Owner", "+55 11 90000-0133").await;
     let seller = seed_active(db.pool(), "Race Seller", "+55 11 90000-0134").await;
+    // One buyer holds at most three open requests (P24-T01), so the demands
+    // come from different buyers: the quota under test is the seller's
+    // submission allowance.
     for index in 0..9 {
+        let author = seed_active(
+            db.pool(),
+            &format!("Race Owner {index}"),
+            &format!("+55 11 90200-0{:02}", 10 + index),
+        )
+        .await;
         let request_id = publish_open(db.pool(), author, &format!("Race Demand {index}")).await;
         submit_open(db.pool(), seller, request_id).await;
     }
-    let first = publish_open(db.pool(), author, "Race Final One").await;
-    let second = publish_open(db.pool(), author, "Race Final Two").await;
+    let first_author = seed_active(db.pool(), "Race Owner One", "+55 11 90200-0098").await;
+    let first = publish_open(db.pool(), first_author, "Race Final One").await;
+    let second_author = seed_active(db.pool(), "Race Owner Two", "+55 11 90200-0099").await;
+    let second = publish_open(db.pool(), second_author, "Race Final Two").await;
 
     // Both contenders observe nine successes and race for the tenth in
     // serializable transactions: one commits, the other retries, re-reads

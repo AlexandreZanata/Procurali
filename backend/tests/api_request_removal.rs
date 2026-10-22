@@ -110,7 +110,7 @@ async fn counts(
         match result {
             Ok(count) => count,
             Err(AttemptError::Abort(_)) => panic!("probe refusal impossible"),
-            Err(AttemptError::Db(_)) => panic!("probe storage failed"),
+            Err(AttemptError::Db(_) | AttemptError::Conflict) => panic!("probe storage failed"),
         }
     }
     let mut tx = pool.begin().await.expect("transaction begins");

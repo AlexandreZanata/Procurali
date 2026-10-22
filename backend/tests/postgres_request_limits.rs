@@ -21,7 +21,8 @@
 mod database;
 
 use database::TestDatabase;
-use procurali_backend::application::publish_request::publish_request;
+use procurali_backend::application::publish_request::{publish_request, PublishError};
+use procurali_backend::application::remove_request::remove_request;
 use procurali_backend::application::request_drafts::{create_draft, DraftInput};
 use procurali_backend::application::request_limits::{
     activation_count, check_activation_limits, open_request_count, LimitError,
@@ -117,7 +118,7 @@ async fn guard(
     match verdict {
         Ok(()) => Ok(()),
         Err(AttemptError::Abort(reason)) => Err(reason),
-        Err(AttemptError::Db(_)) => panic!("probe storage failed"),
+        Err(AttemptError::Db(_) | AttemptError::Conflict) => panic!("probe storage failed"),
     }
 }
 
@@ -131,7 +132,7 @@ async fn counts(
         match result {
             Ok(count) => count,
             Err(AttemptError::Abort(_)) => panic!("probe refusal impossible"),
-            Err(AttemptError::Db(_)) => panic!("probe storage failed"),
+            Err(AttemptError::Db(_) | AttemptError::Conflict) => panic!("probe storage failed"),
         }
     }
     let mut tx = pool.begin().await.expect("transaction begins");
@@ -313,16 +314,16 @@ async fn seventh_in_window_activation_is_refused() {
     let mut ids = Vec::new();
     for index in 0..6 {
         ids.push(publish_open(db.pool(), author, &format!("Window {index}")).await);
-    }
-    // Six activations stand; close four so slots stay out of the way.
-    for id in ids.iter().take(4) {
+        // Each publication closes its slot again: the rolling window is what
+        // this test measures, and the open-slot allowance is enforced by the
+        // publication itself (P24-T01).
         sqlx::query("UPDATE requests SET state = 'cancelled' WHERE id = $1")
-            .bind(id)
+            .bind(ids.last().expect("published id"))
             .execute(db.pool())
             .await
             .expect("synthetic closure applies");
     }
-    assert_eq!(counts(db.pool(), author, now).await, (2, 6));
+    assert_eq!(counts(db.pool(), author, now).await, (0, 6));
 
     // The seventh in-window activation is refused with slots to spare.
     assert_eq!(
@@ -358,10 +359,11 @@ async fn rolling_boundary_ignores_elapsed_facts() {
     let mut ids = Vec::new();
     for index in 0..5 {
         ids.push(publish_open(db.pool(), author, &format!("Rolling {index}")).await);
-    }
-    for id in &ids {
+        // Each publication closes its slot again: the rolling window is what
+        // this test measures, and the open-slot allowance is enforced by the
+        // publication itself (P24-T01).
         sqlx::query("UPDATE requests SET state = 'cancelled' WHERE id = $1")
-            .bind(id)
+            .bind(ids.last().expect("published id"))
             .execute(db.pool())
             .await
             .expect("synthetic closure applies");
@@ -560,4 +562,248 @@ async fn final_slot_contenders_cannot_overpublish() {
         1
     );
     db.cleanup().await.expect("suite cleans up");
+}
+
+// --- P24-T01: the publication itself enforces the quotas -------------------
+
+/// A real draft through the real draft operation.
+async fn real_draft(pool: &sqlx::PgPool, author: uuid::Uuid, title: &str) -> uuid::Uuid {
+    let draft = create_draft(
+        pool,
+        author,
+        DraftInput {
+            title: Some(title.to_owned()),
+            category_code: Some("home_appliances".to_owned()),
+            budget: Some("600.00".to_owned()),
+            condition: Some("either".to_owned()),
+            city_code: Some("campinas".to_owned()),
+            region_code: Some("centro".to_owned()),
+            notes: None,
+        },
+    )
+    .await
+    .expect("fixture draft validates");
+    draft.id
+}
+
+/// One published request through the real publication operation.
+async fn real_publish(
+    pool: &sqlx::PgPool,
+    author: uuid::Uuid,
+    title: &str,
+) -> Result<uuid::Uuid, PublishError> {
+    let draft = real_draft(pool, author, title).await;
+    publish_request(pool, author, draft)
+        .await
+        .map(|published| published.id)
+}
+
+#[tokio::test]
+async fn the_publication_refuses_the_fourth_open_request() {
+    let db = TestDatabase::create("p24t01_slots")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p24t01_slots_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let author = seed_author(db.pool(), "Slot Owner", "+55 11 90000-0081").await;
+
+    // Three open requests occupy the three open slots.
+    for index in 1..=3 {
+        real_publish(db.pool(), author, &format!("Slot Item {index}"))
+            .await
+            .expect("the first three publications succeed");
+    }
+    let open_before: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM requests AS request
+         JOIN request_cycles AS cycle
+           ON cycle.request_id = request.id
+          AND cycle.cycle_number = request.current_cycle_number
+         WHERE request.author_id = $1 AND request.state = 'active'
+           AND request.visibility <> 'hidden' AND cycle.deadline > now()",
+    )
+    .bind(author)
+    .fetch_one(db.pool())
+    .await
+    .expect("open count reads");
+    assert_eq!(open_before, 3);
+
+    // The fourth is refused by the publication itself, with the quota reason.
+    let draft = real_draft(db.pool(), author, "Slot Item Four").await;
+    let refused = publish_request(db.pool(), author, draft)
+        .await
+        .expect_err("the fourth open request is refused");
+    assert_eq!(refused, PublishError::OpenSlotsExhausted);
+
+    // Nothing was written by the refusal: the draft stayed a draft and no
+    // cycle opened for it.
+    let (state, cycles): (String, i64) = sqlx::query_as(
+        "SELECT request.state, count(cycle.cycle_number)
+         FROM requests AS request
+         LEFT JOIN request_cycles AS cycle ON cycle.request_id = request.id
+         WHERE request.id = $1
+         GROUP BY request.state",
+    )
+    .bind(draft)
+    .fetch_one(db.pool())
+    .await
+    .expect("refused draft reads");
+    assert_eq!(state, "draft", "the refused draft never became a request");
+    assert_eq!(cycles, 0, "the refusal opened no cycle");
+    let facts: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM business_events
+         WHERE actor_id = $1 AND kind = 'request.published'",
+    )
+    .bind(author)
+    .fetch_one(db.pool())
+    .await
+    .expect("facts read");
+    assert_eq!(facts, 3, "the refusal recorded no activation fact");
+
+    // A removal frees the slot without refunding the rolling activation.
+    let open_ids: Vec<uuid::Uuid> =
+        sqlx::query_scalar("SELECT id FROM requests WHERE author_id = $1 AND state = 'active'")
+            .bind(author)
+            .fetch_all(db.pool())
+            .await
+            .expect("open requests read");
+    remove_request(db.pool(), author, open_ids[0])
+        .await
+        .expect("the owner removes one request");
+    real_publish(db.pool(), author, "Slot Item Five")
+        .await
+        .expect("the freed slot accepts a new request");
+    let activations = activation_count_now(db.pool(), author).await;
+    assert_eq!(
+        activations, 4,
+        "the removal freed a slot but refunded no activation"
+    );
+
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn the_publication_refuses_the_seventh_activation() {
+    let db = TestDatabase::create("p24t01_window")
+        .await
+        .expect("disposable database allocates");
+    seed_catalog(db.pool()).await;
+    let author = seed_author(db.pool(), "Window Owner", "+55 11 90000-0082").await;
+
+    // Six activations inside the rolling window, with at most three open
+    // requests at any time.
+    let mut published = Vec::new();
+    for index in 1..=3 {
+        published.push(
+            real_publish(db.pool(), author, &format!("Window Item {index}"))
+                .await
+                .expect("the first three publications succeed"),
+        );
+    }
+    for request in &published {
+        remove_request(db.pool(), author, *request)
+            .await
+            .expect("the owner frees the slots");
+    }
+    published = Vec::new();
+    for index in 4..=6 {
+        published.push(
+            real_publish(db.pool(), author, &format!("Window Item {index}"))
+                .await
+                .expect("the next three publications succeed"),
+        );
+    }
+    for request in published.iter().take(2) {
+        remove_request(db.pool(), author, *request)
+            .await
+            .expect("the owner frees the slots");
+    }
+    assert_eq!(
+        activation_count_now(db.pool(), author).await,
+        6,
+        "six activations stand inside the window"
+    );
+
+    // The seventh activation is refused even though an open slot is free.
+    let refused = real_publish(db.pool(), author, "Window Item Seven").await;
+    assert_eq!(refused, Err(PublishError::ActivationQuotaExhausted));
+    assert_eq!(
+        activation_count_now(db.pool(), author).await,
+        6,
+        "the refusal consumed no activation"
+    );
+
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn two_contenders_for_the_final_slot_cannot_overpublish() {
+    let db = TestDatabase::create("p24t01_race")
+        .await
+        .expect("disposable database allocates");
+    seed_catalog(db.pool()).await;
+    let author = seed_author(db.pool(), "Race Owner", "+55 11 90000-0083").await;
+    for index in 1..=2 {
+        real_publish(db.pool(), author, &format!("Race Item {index}"))
+            .await
+            .expect("the first two publications succeed");
+    }
+
+    // Two publications race for the third and final slot: the serializable
+    // publication transaction serializes them, and the loser retries,
+    // observes the winner, and takes the quota refusal.
+    let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(2));
+    let publish = |barrier: std::sync::Arc<tokio::sync::Barrier>, title: &'static str| {
+        let pool = db.pool().clone();
+        async move {
+            let draft = real_draft(&pool, author, title).await;
+            barrier.wait().await;
+            publish_request(&pool, author, draft)
+                .await
+                .map(|published| published.id)
+        }
+    };
+    let (first, second) = tokio::join!(
+        publish(std::sync::Arc::clone(&barrier), "Race Item Three"),
+        publish(barrier, "Race Item Four"),
+    );
+    let outcomes = [first, second];
+    assert_eq!(
+        outcomes.iter().filter(|outcome| outcome.is_ok()).count(),
+        1,
+        "exactly one contender takes the final slot"
+    );
+    assert!(
+        outcomes
+            .iter()
+            .any(|outcome| matches!(outcome, Err(PublishError::OpenSlotsExhausted))),
+        "the loser takes the quota refusal, not a silent success: {outcomes:?}"
+    );
+    let open: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM requests AS request
+         JOIN request_cycles AS cycle
+           ON cycle.request_id = request.id
+          AND cycle.cycle_number = request.current_cycle_number
+         WHERE request.author_id = $1 AND request.state = 'active'
+           AND request.visibility <> 'hidden' AND cycle.deadline > now()",
+    )
+    .bind(author)
+    .fetch_one(db.pool())
+    .await
+    .expect("open count reads");
+    assert_eq!(open, 3, "the owner never exceeds the open-slot allowance");
+
+    db.cleanup().await.expect("suite cleans up");
+}
+
+/// The owner's successful activations inside the rolling window.
+async fn activation_count_now(pool: &sqlx::PgPool, author: uuid::Uuid) -> u32 {
+    let mut tx = pool.begin().await.expect("transaction begins");
+    let count = activation_count(&mut tx, author, chrono::Utc::now())
+        .await
+        .expect("activations read");
+    tx.rollback().await.expect("rollback");
+    count
 }

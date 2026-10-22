@@ -329,7 +329,7 @@ pub async fn submit_offer(
             AttemptError::Abort(RequestEligibilityError::Expired) => SubmitError::ExpiredRequest,
             AttemptError::Abort(RequestEligibilityError::NotFound) => SubmitError::NotFound,
             AttemptError::Abort(_) => SubmitError::ForbiddenState,
-            AttemptError::Db(_) => SubmitError::StorageFailed,
+            AttemptError::Db(_) | AttemptError::Conflict => SubmitError::StorageFailed,
         })?;
     if valid.cycle_number != actionable.cycle_number {
         tx.rollback()

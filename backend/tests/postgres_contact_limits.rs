@@ -141,7 +141,7 @@ async fn guard(
     match verdict {
         Ok(()) => Ok(()),
         Err(AttemptError::Abort(reason)) => Err(reason),
-        Err(AttemptError::Db(_)) => panic!("probe storage failed"),
+        Err(AttemptError::Db(_) | AttemptError::Conflict) => panic!("probe storage failed"),
     }
 }
 
@@ -153,7 +153,7 @@ async fn counted(pool: &sqlx::PgPool, request_id: uuid::Uuid) -> u32 {
     match count {
         Ok(count) => count,
         Err(AttemptError::Abort(_)) => panic!("probe refusal impossible"),
-        Err(AttemptError::Db(_)) => panic!("probe storage failed"),
+        Err(AttemptError::Db(_) | AttemptError::Conflict) => panic!("probe storage failed"),
     }
 }
 

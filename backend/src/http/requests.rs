@@ -251,6 +251,17 @@ fn publish_error(error: PublishError) -> Response {
         PublishError::DuplicateIntent => {
             ApiError::new(Code::DuplicateIntent, "duplicate open demand exists").into_response()
         }
+        // The quota refusals share the closed registry's rolling-allowance
+        // code: the open-slot and the activation allowance are the same
+        // business gate, and no new code is invented for it.
+        PublishError::OpenSlotsExhausted | PublishError::ActivationQuotaExhausted => {
+            ApiError::new(Code::QuotaExceeded, "request allowance exhausted").into_response()
+        }
+        // A concurrent publication already published this draft: the caller
+        // answers with the standing receipt, never a second activation.
+        PublishError::AlreadyPublished => {
+            ApiError::new(Code::ForbiddenState, "request cannot be published").into_response()
+        }
         PublishError::StorageFailed => ApiError::internal().into_response(),
     }
 }

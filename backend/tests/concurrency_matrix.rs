@@ -12,7 +12,7 @@
 mod database;
 
 use database::TestDatabase;
-use procurali_backend::application::publish_request::publish_request;
+use procurali_backend::application::publish_request::{publish_request, PublishError};
 use procurali_backend::application::renew_request::{
     renew_request, RenewError, RenewalConfirmation,
 };
@@ -319,11 +319,45 @@ async fn sequential_renewals_respect_open_slots() {
             .await
             .expect("slot renewal succeeds");
     }
-    let fourth = publish_open(db.pool(), buyer, "Allowance Four").await;
-    backdate_cycle(db.pool(), fourth).await;
+    // Three open demands stand, so a further publication refuses on the
+    // open slots instead of activating.
+    let fourth_draft = create_draft(
+        db.pool(),
+        buyer,
+        DraftInput {
+            title: Some("Allowance Four".to_owned()),
+            category_code: Some("home_appliances".to_owned()),
+            budget: Some("520.00".to_owned()),
+            condition: Some("either".to_owned()),
+            city_code: Some("campinas".to_owned()),
+            region_code: Some("centro".to_owned()),
+            notes: Some("Preferably frost-free.".to_owned()),
+        },
+    )
+    .await
+    .expect("fixture draft validates");
     assert_eq!(
-        renew_request(db.pool(), buyer, fourth, confirmation("Allowance Four")).await,
-        Err(RenewError::OpenSlotsExhausted)
+        publish_request(db.pool(), buyer, fourth_draft.id).await,
+        Err(PublishError::OpenSlotsExhausted)
+    );
+    // A further renewal of a standing demand is refused by the rolling
+    // activation window: three publications plus three renewals already
+    // stand inside it. The renewed cycle is the current one, so it is the
+    // one that ages.
+    sqlx::query(
+        "UPDATE request_cycles SET started_at = $2, deadline = $3
+         WHERE request_id = $1
+           AND cycle_number = (SELECT max(cycle_number) FROM request_cycles WHERE request_id = $1)",
+    )
+    .bind(demands[0].1)
+    .bind(chrono::Utc::now() - chrono::Duration::days(8))
+    .bind(chrono::Utc::now() - chrono::Duration::days(1))
+    .execute(db.pool())
+    .await
+    .expect("synthetic expiry applies");
+    assert_eq!(
+        renew_request(db.pool(), buyer, demands[0].1, confirmation(&demands[0].0)).await,
+        Err(RenewError::ActivationQuotaExhausted)
     );
     assert_eq!(renewal_events(db.pool(), buyer).await, 3);
     let open: i64 = sqlx::query_scalar(
@@ -337,7 +371,9 @@ async fn sequential_renewals_respect_open_slots() {
     .fetch_one(db.pool())
     .await
     .expect("open rows read");
-    assert_eq!(open, 3);
+    // One demand aged out for the renewal attempt above, so two remain
+    // open: the renewals never added an open request of their own.
+    assert_eq!(open, 2);
     db.cleanup().await.expect("suite cleans up");
 }
 

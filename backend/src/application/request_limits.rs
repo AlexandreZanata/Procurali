@@ -89,6 +89,25 @@ pub async fn open_request_count(
     author_id: uuid::Uuid,
     now: chrono::DateTime<chrono::Utc>,
 ) -> Result<u32, AttemptError<LimitError>> {
+    open_request_count_excluding(tx, author_id, now, None).await
+}
+
+/// Current open requests for one account, ignoring one request.
+///
+/// A renewal replaces its own request instead of adding one, so the slot it
+/// keeps must not be counted against itself.
+///
+/// # Errors
+///
+/// Returns [`AttemptError::Db`] on database failure (retryable only for
+/// genuine conflicts) and [`AttemptError::Abort`] wrapping
+/// [`LimitError::StorageFailed`] for an impossible negative count.
+pub async fn open_request_count_excluding(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    author_id: uuid::Uuid,
+    now: chrono::DateTime<chrono::Utc>,
+    except: Option<uuid::Uuid>,
+) -> Result<u32, AttemptError<LimitError>> {
     let count: i64 = sqlx::query_scalar(
         "SELECT count(*)
          FROM requests AS request
@@ -98,10 +117,12 @@ pub async fn open_request_count(
          WHERE request.author_id = $1
            AND request.state IN ('active', 'suspended')
            AND request.visibility <> 'hidden'
-           AND cycle.deadline > $2",
+           AND cycle.deadline > $2
+           AND ($3::uuid IS NULL OR request.id <> $3)",
     )
     .bind(author_id)
     .bind(now)
+    .bind(except)
     .fetch_one(&mut **tx)
     .await
     .map_err(AttemptError::Db)?;
@@ -109,8 +130,11 @@ pub async fn open_request_count(
 }
 
 /// Successful activations for one account inside the rolling window ending
-/// at `now`: `request.published` facts with an in-window effective time.
-/// Removal, closure, and expiry never delete facts, so they never refund.
+/// at `now`: `request.published` and `request.renewed` facts with an
+/// in-window effective time. A renewal consumes activation allowance exactly
+/// like a publication (requests 8.4), so both kinds count against the same
+/// window. Removal, closure, and expiry never delete facts, so they never
+/// refund.
 ///
 /// # Errors
 ///
@@ -127,7 +151,7 @@ pub async fn activation_count(
          FROM business_events
          WHERE actor_id = $1
            AND resource_kind = 'request'
-           AND kind = 'request.published'
+           AND kind IN ('request.published', 'request.renewed')
            AND effective_at > $2",
     )
     .bind(author_id)
@@ -153,8 +177,12 @@ pub async fn check_activation_limits(
     author_id: uuid::Uuid,
     now: chrono::DateTime<chrono::Utc>,
 ) -> Result<(), AttemptError<LimitError>> {
+    // The account row is locked for the rest of the transaction: the
+    // owner's own request creations serialize here, so two contenders for
+    // the final slot wait instead of conflicting, and the loser observes the
+    // winner's committed row when it reads the counters.
     let standing: Option<(String, Option<chrono::DateTime<chrono::Utc>>)> =
-        sqlx::query_as("SELECT state, deleted_at FROM users WHERE id = $1")
+        sqlx::query_as("SELECT state, deleted_at FROM users WHERE id = $1 FOR UPDATE")
             .bind(author_id)
             .fetch_optional(&mut **tx)
             .await

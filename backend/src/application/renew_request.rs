@@ -23,7 +23,7 @@
 
 use crate::application::eligibility::{check_actor, CheckOutcome};
 use crate::application::request_limits::{
-    activation_count, open_request_count, MAX_ACTIVATIONS_PER_WINDOW, MAX_OPEN_REQUESTS,
+    activation_count, open_request_count_excluding, MAX_ACTIVATIONS_PER_WINDOW, MAX_OPEN_REQUESTS,
 };
 use crate::domain::money::{Money, MoneyError};
 use crate::domain::text::normalize_for_comparison;
@@ -157,31 +157,6 @@ impl std::fmt::Display for RenewError {
 
 impl std::error::Error for RenewError {}
 
-/// Successful `request.renewed` facts for one account inside the rolling
-/// window ending at `now`. Joins the publication count so renewals consume
-/// the same allowance without resetting it (EC-08, INV-15); a future
-/// unification owns the single predicate.
-async fn renewal_count(
-    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-    author_id: uuid::Uuid,
-    now: chrono::DateTime<chrono::Utc>,
-) -> Result<u32, RenewError> {
-    let count: i64 = sqlx::query_scalar(
-        "SELECT count(*)
-         FROM business_events
-         WHERE actor_id = $1
-           AND resource_kind = 'request'
-           AND kind = 'request.renewed'
-           AND effective_at > $2",
-    )
-    .bind(author_id)
-    .bind(now - chrono::Duration::hours(24))
-    .fetch_one(&mut **tx)
-    .await
-    .map_err(|_| RenewError::StorageFailed)?;
-    u32::try_from(count).map_err(|_| RenewError::StorageFailed)
-}
-
 /// Renew one owned eligible request: confirm currency, guard quotas, end
 /// the prior cycle, and open a fresh seven-day cycle with exactly one
 /// `request.renewed` fact. Identity, revision, and first-publication time
@@ -278,9 +253,11 @@ pub async fn renew_request(
                     Limit::StorageFailed => RenewError::StorageFailed,
                 }
             }
-            AttemptError::Db(_) => RenewError::StorageFailed,
+            AttemptError::Db(_) | AttemptError::Conflict => RenewError::StorageFailed,
         };
-    if open_request_count(&mut tx, author_id, now)
+    // A renewal replaces its own request instead of adding one, so the slot
+    // it keeps is not counted against itself.
+    if open_request_count_excluding(&mut tx, author_id, now, Some(request_id))
         .await
         .map_err(map_limit)?
         >= MAX_OPEN_REQUESTS
@@ -288,11 +265,13 @@ pub async fn renew_request(
         tx.rollback().await.map_err(|_| RenewError::StorageFailed)?;
         return Err(RenewError::OpenSlotsExhausted);
     }
-    let published = activation_count(&mut tx, author_id, now)
+    // The activation allowance counts publications and renewals in the same
+    // rolling window (EC-08, INV-15): a renewal consumes the same allowance
+    // a publication does, and neither resets it.
+    let activations = activation_count(&mut tx, author_id, now)
         .await
         .map_err(map_limit)?;
-    let renewed = renewal_count(&mut tx, author_id, now).await?;
-    if published.saturating_add(renewed) >= MAX_ACTIVATIONS_PER_WINDOW {
+    if activations >= MAX_ACTIVATIONS_PER_WINDOW {
         tx.rollback().await.map_err(|_| RenewError::StorageFailed)?;
         return Err(RenewError::ActivationQuotaExhausted);
     }

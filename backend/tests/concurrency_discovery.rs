@@ -203,10 +203,12 @@ async fn changes_between_pages_keep_cursor_exact() {
     }
     assert_eq!(published.len(), 4);
     let (alpha, beta, gamma, delta) = (published[0], published[1], published[2], published[3]);
-    // A removed-analogue row never lists anywhere in this journey.
+    // A removed-analogue row never lists anywhere in this journey. One
+    // buyer holds at most three open requests (P24-T01), so it belongs to
+    // the second buyer.
     let removed = publish_demand(
         db.pool(),
-        author_one,
+        author_two,
         "Gone Fridge",
         "640.00",
         "campinas",

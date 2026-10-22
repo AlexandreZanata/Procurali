@@ -135,7 +135,7 @@ pub async fn replay_contact(
             AttemptError::Abort(RequestEligibilityError::Expired) => ReplayError::ExpiredRequest,
             AttemptError::Abort(RequestEligibilityError::NotFound) => ReplayError::NotFound,
             AttemptError::Abort(_) => ReplayError::ForbiddenState,
-            AttemptError::Db(_) => ReplayError::StorageFailed,
+            AttemptError::Db(_) | AttemptError::Conflict => ReplayError::StorageFailed,
         })?;
     let offer: Option<(String, i32, i32, i32)> = sqlx::query_as(
         "SELECT state, cycle_number, revision_number, current_terms_number

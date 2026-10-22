@@ -44,6 +44,11 @@ pub enum AttemptError<E> {
     Abort(E),
     /// Storage failure: retry only when the SQLSTATE is retryable.
     Db(sqlx::Error),
+    /// A statement failed and the transaction is aborted, which in
+    /// PostgreSQL's serializable isolation is the conflict signal: retry
+    /// with fresh reads. The persistence layer classifies the statement
+    /// error, so a genuine conflict never becomes a flat refusal.
+    Conflict,
 }
 
 /// Final transaction outcome. Static reasons only — no URLs or secrets.
@@ -173,6 +178,16 @@ where
                     });
                 }
                 return Err(TransactionError::StorageFailed);
+            }
+            Err(AttemptError::Conflict) => {
+                let _ = tx.rollback().await;
+                attempt += 1;
+                if attempt < MAX_TRANSACTION_ATTEMPTS {
+                    continue;
+                }
+                return Err(TransactionError::RetryExhausted {
+                    attempts: MAX_TRANSACTION_ATTEMPTS,
+                });
             }
         }
     }

@@ -66,7 +66,7 @@ async fn guard(
     match verdict {
         Ok(()) => Ok(()),
         Err(AttemptError::Abort(reason)) => Err(reason),
-        Err(AttemptError::Db(_)) => panic!("probe storage failed"),
+        Err(AttemptError::Db(_) | AttemptError::Conflict) => panic!("probe storage failed"),
     }
 }
 

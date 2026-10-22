@@ -31,6 +31,7 @@ use crate::persistence::events::{record as record_event, NewEvent};
 use crate::persistence::requests::{
     self, format_budget, insert_revision, start_cycle, RequirementSnapshot,
 };
+use crate::persistence::transaction::{run_serializable, AttemptError, TransactionError};
 use serde_json::json;
 
 /// Publication window: seven consecutive 24-hour periods (principles 2.2).
@@ -109,6 +110,13 @@ pub enum PublishError {
     ForbiddenState,
     /// An identical open need already exists for this owner.
     DuplicateIntent,
+    /// Three genuinely open requests already exist.
+    OpenSlotsExhausted,
+    /// Six successful activations already fall inside the rolling window.
+    ActivationQuotaExhausted,
+    /// A concurrent publication already published this draft: the caller
+    /// answers with the standing receipt and nothing is written twice.
+    AlreadyPublished,
     /// The lookup or write failed.
     StorageFailed,
 }
@@ -128,6 +136,9 @@ impl std::fmt::Display for PublishError {
             Self::NotFound => f.write_str("draft not found"),
             Self::ForbiddenState => f.write_str("request cannot be published"),
             Self::DuplicateIntent => f.write_str("duplicate open demand exists"),
+            Self::OpenSlotsExhausted => f.write_str("open request slots exhausted"),
+            Self::ActivationQuotaExhausted => f.write_str("activation quota exhausted"),
+            Self::AlreadyPublished => f.write_str("request already published"),
             Self::StorageFailed => f.write_str("publication storage failed"),
         }
     }
@@ -168,33 +179,43 @@ fn validate_stored(request: &requests::Request) -> Result<RequirementSnapshot, P
 
 /// Enforce the allowed-use policy at the effective time, inside the guarded
 /// transaction: the category must allow new use and the city must be enabled.
+///
+/// Policy refusals are business refusals and never retried; a storage failure
+/// inside the serializable transaction is the conflict signal, so it carries
+/// the retryable marker instead of a flat refusal.
 async fn check_publication_policy(
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
     snapshot: &RequirementSnapshot,
-) -> Result<(), PublishError> {
+) -> Result<(), AttemptError<PublishError>> {
     let category = catalogs::category(&mut **tx, &snapshot.category_code)
         .await
-        .map_err(|_| PublishError::StorageFailed)?;
+        .map_err(|_| AttemptError::Conflict)?;
     match category.map(|entry| entry.status) {
-        None => return Err(PublishError::UnknownCategory),
-        Some(CategoryStatus::Retired) => return Err(PublishError::RetiredCategory),
-        Some(CategoryStatus::Prohibited) => return Err(PublishError::ProhibitedCategory),
+        None => return Err(AttemptError::Abort(PublishError::UnknownCategory)),
+        Some(CategoryStatus::Retired) => {
+            return Err(AttemptError::Abort(PublishError::RetiredCategory));
+        }
+        Some(CategoryStatus::Prohibited) => {
+            return Err(AttemptError::Abort(PublishError::ProhibitedCategory));
+        }
         Some(CategoryStatus::Allowed) => {}
     }
     let cities = catalogs::cities(&mut **tx, false)
         .await
-        .map_err(|_| PublishError::StorageFailed)?;
+        .map_err(|_| AttemptError::Conflict)?;
     let city = cities.iter().find(|entry| entry.code == snapshot.city_code);
     match city {
-        None => return Err(PublishError::UnknownCity),
-        Some(entry) if !entry.enabled => return Err(PublishError::CityNotEnabled),
+        None => return Err(AttemptError::Abort(PublishError::UnknownCity)),
+        Some(entry) if !entry.enabled => {
+            return Err(AttemptError::Abort(PublishError::CityNotEnabled));
+        }
         Some(_) => {}
     }
     let region = catalogs::region(&mut **tx, &snapshot.city_code, &snapshot.region_code)
         .await
-        .map_err(|_| PublishError::StorageFailed)?;
+        .map_err(|_| AttemptError::Conflict)?;
     if region.is_none() {
-        return Err(PublishError::UnknownRegion);
+        return Err(AttemptError::Abort(PublishError::UnknownRegion));
     }
     Ok(())
 }
@@ -278,10 +299,38 @@ pub async fn publish_request(
     }
     let snapshot = validate_stored(&stored)?;
 
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|_| PublishError::StorageFailed)?;
+    // The publication evaluates the quota guard and activates inside one
+    // serializable transaction (DEC-0003): concurrent activations of the
+    // same owner serialize instead of overpublishing, and the loser retries,
+    // observes the winner, and takes the quota refusal.
+    let outcome = run_serializable(pool, |tx, _attempt| {
+        let snapshot = snapshot.clone();
+        Box::pin(async move { publish_in_transaction(tx, author_id, draft_id, &snapshot).await })
+    })
+    .await;
+    match outcome {
+        Ok(()) => existing_receipt(pool, draft_id).await,
+        Err(TransactionError::Aborted(PublishError::AlreadyPublished)) => {
+            // A concurrent publication won: the standing request answers
+            // with the same receipt and nothing is written twice.
+            existing_receipt(pool, draft_id).await
+        }
+        Err(TransactionError::Aborted(error)) => Err(error),
+        Err(TransactionError::RetryExhausted { .. }) | Err(TransactionError::StorageFailed) => {
+            Err(PublishError::StorageFailed)
+        }
+    }
+}
+
+/// The publication transaction: lock the draft, evaluate every rule, and
+/// activate atomically. Each attempt re-reads the clock, the quotas, and the
+/// duplicate rule, so a retry never reuses a stale read.
+async fn publish_in_transaction(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    author_id: uuid::Uuid,
+    draft_id: uuid::Uuid,
+    snapshot: &RequirementSnapshot,
+) -> Result<(), AttemptError<PublishError>> {
     // Lock the draft before mutating: concurrent publications serialize here,
     // and the loser observes the winner's row below.
     let locked: Option<(String, i32, i32)> = sqlx::query_as(
@@ -289,29 +338,21 @@ pub async fn publish_request(
          FROM requests WHERE id = $1 FOR UPDATE",
     )
     .bind(draft_id)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| PublishError::StorageFailed)?;
-    let (state, cycles, revisions) = locked.ok_or(PublishError::StorageFailed)?;
+    .map_err(AttemptError::Db)?;
+    let (state, cycles, revisions) =
+        locked.ok_or(AttemptError::Abort(PublishError::StorageFailed))?;
     if state == "active" && cycles >= 1 && revisions >= 1 {
-        tx.rollback()
-            .await
-            .map_err(|_| PublishError::StorageFailed)?;
-        return existing_receipt(pool, draft_id).await;
+        // A concurrent publication won: this attempt observes the standing
+        // request and the caller answers with the same receipt.
+        return Err(AttemptError::Abort(PublishError::AlreadyPublished));
     }
     if state != "draft" || cycles != 0 || revisions != 0 {
-        tx.rollback()
-            .await
-            .map_err(|_| PublishError::StorageFailed)?;
-        return Err(PublishError::ForbiddenState);
+        return Err(AttemptError::Abort(PublishError::ForbiddenState));
     }
     // Roll back before reporting a policy refusal: no partial fact.
-    if let Err(error) = check_publication_policy(&mut tx, &snapshot).await {
-        tx.rollback()
-            .await
-            .map_err(|_| PublishError::StorageFailed)?;
-        return Err(error);
-    }
+    check_publication_policy(tx, snapshot).await?;
     // Enforce exact duplicate intent in the same transaction: an identical
     // open need refuses here, so concurrent publications serialize on the
     // draft lock above and the loser observes the winner.
@@ -319,7 +360,6 @@ pub async fn publish_request(
         use crate::application::duplicate_intent::{
             check_duplicate_intent, DuplicateError, NewIntent,
         };
-        use crate::persistence::transaction::AttemptError;
         let candidate = NewIntent {
             title: snapshot.title.clone(),
             category_code: snapshot.category_code.clone(),
@@ -328,33 +368,58 @@ pub async fn publish_request(
             city_code: snapshot.city_code.clone(),
             region_code: snapshot.region_code.clone(),
         };
-        if let Err(error) = check_duplicate_intent(&mut tx, author_id, &candidate).await {
-            tx.rollback()
-                .await
-                .map_err(|_| PublishError::StorageFailed)?;
-            return Err(match error {
+        check_duplicate_intent(tx, author_id, &candidate)
+            .await
+            .map_err(|error| match error {
                 AttemptError::Abort(DuplicateError::DuplicateIntent) => {
-                    PublishError::DuplicateIntent
+                    AttemptError::Abort(PublishError::DuplicateIntent)
                 }
-                AttemptError::Abort(_) => PublishError::StorageFailed,
-                AttemptError::Db(_) => PublishError::StorageFailed,
-            });
-        }
+                AttemptError::Abort(_) => AttemptError::Abort(PublishError::StorageFailed),
+                AttemptError::Db(error) => AttemptError::Db(error),
+                AttemptError::Conflict => AttemptError::Conflict,
+            })?;
+    }
+    // The quota guard runs in the same guarded transaction as the activation
+    // it bounds: three open requests and six activations per rolling window,
+    // refused with an explanation and nothing written.
+    {
+        use crate::application::request_limits::{check_activation_limits, LimitError};
+        let now = chrono::Utc::now();
+        check_activation_limits(tx, author_id, now)
+            .await
+            .map_err(|error| match error {
+                AttemptError::Abort(LimitError::OpenSlotsExhausted) => {
+                    AttemptError::Abort(PublishError::OpenSlotsExhausted)
+                }
+                AttemptError::Abort(LimitError::ActivationQuotaExhausted) => {
+                    AttemptError::Abort(PublishError::ActivationQuotaExhausted)
+                }
+                AttemptError::Abort(LimitError::NotActive) => {
+                    AttemptError::Abort(PublishError::NotActive)
+                }
+                AttemptError::Abort(_) => AttemptError::Abort(PublishError::StorageFailed),
+                AttemptError::Db(error) => AttemptError::Db(error),
+                AttemptError::Conflict => AttemptError::Conflict,
+            })?;
     }
     let started_at = chrono::Utc::now();
     let deadline = seven_day_deadline(started_at);
-    let revision = insert_revision(&mut tx, draft_id, 1, &snapshot)
+    // A write failure inside this transaction is the conflict signal:
+    // PostgreSQL aborts the statement and the transaction, and the
+    // serializable runner retries with fresh reads. A deterministic failure
+    // repeats identically and ends as the same storage refusal.
+    let revision = insert_revision(tx, draft_id, 1, snapshot)
         .await
-        .map_err(|_| PublishError::StorageFailed)?;
-    start_cycle(&mut tx, draft_id, 1, started_at, deadline)
+        .map_err(|_| AttemptError::Conflict)?;
+    start_cycle(tx, draft_id, 1, started_at, deadline)
         .await
-        .map_err(|_| PublishError::StorageFailed)?;
+        .map_err(|_| AttemptError::Conflict)?;
     // The cycle's expiry sweep belongs to this publication: it commits with
     // it, so a live cycle always carries the work that ends it, and a
     // refused publication schedules nothing.
-    crate::operations::jobs::expire_requests::enqueue_expiry_in_tx(&mut tx, draft_id, 1, deadline)
+    crate::operations::jobs::expire_requests::enqueue_expiry_in_tx(tx, draft_id, 1, deadline)
         .await
-        .map_err(|_| PublishError::StorageFailed)?;
+        .map_err(|_| AttemptError::Abort(PublishError::StorageFailed))?;
     // The first revision is current from birth: promotion and activation are
     // one atomic flip, so current requirements and history never disagree.
     let activated: Option<i32> = sqlx::query_scalar(
@@ -363,17 +428,14 @@ pub async fn publish_request(
          WHERE id = $1 AND state = 'draft' RETURNING 1",
     )
     .bind(draft_id)
-    .fetch_optional(&mut *tx)
+    .fetch_optional(&mut **tx)
     .await
-    .map_err(|_| PublishError::StorageFailed)?;
+    .map_err(AttemptError::Db)?;
     if activated.is_none() {
-        tx.rollback()
-            .await
-            .map_err(|_| PublishError::StorageFailed)?;
-        return Err(PublishError::ForbiddenState);
+        return Err(AttemptError::Abort(PublishError::ForbiddenState));
     }
     record_event(
-        &mut *tx,
+        &mut **tx,
         NewEvent {
             actor_id: Some(author_id),
             resource_kind: "request",
@@ -388,9 +450,8 @@ pub async fn publish_request(
         },
     )
     .await
-    .map_err(|_| PublishError::StorageFailed)?;
-    tx.commit().await.map_err(|_| PublishError::StorageFailed)?;
-    existing_receipt(pool, draft_id).await
+    .map_err(|_| AttemptError::Conflict)?;
+    Ok(())
 }
 
 #[cfg(test)]

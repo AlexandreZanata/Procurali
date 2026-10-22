@@ -218,7 +218,7 @@ pub async fn edit_offer(
             AttemptError::Abort(RequestEligibilityError::Expired) => EditError::ExpiredRequest,
             AttemptError::Abort(RequestEligibilityError::NotFound) => EditError::NotFound,
             AttemptError::Abort(_) => EditError::ForbiddenState,
-            AttemptError::Db(_) => EditError::StorageFailed,
+            AttemptError::Db(_) | AttemptError::Conflict => EditError::StorageFailed,
         })?;
     if actionable.cycle_number != stored.cycle_number
         || actionable.revision_number != stored.revision_number

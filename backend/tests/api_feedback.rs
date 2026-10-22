@@ -20,6 +20,7 @@
 mod database;
 
 use database::TestDatabase;
+use procurali_backend::application::close_request::{close_request, BuyerOutcome, OutcomeSource};
 use procurali_backend::application::feedback::{submit_feedback, FeedbackError, FeedbackInput};
 use procurali_backend::application::publish_request::publish_request;
 use procurali_backend::application::request_drafts::{create_draft, DraftInput};
@@ -181,7 +182,18 @@ async fn window_boundaries_behave_precisely() {
         ("Closing Fridge", "620.00"),
         ("Late Fridge", "630.00"),
     ] {
-        let (_, _, contact) = live_contact(db.pool(), buyer, seller, title, budget).await;
+        let (demand, _, contact) = live_contact(db.pool(), buyer, seller, title, budget).await;
+        // The open-slot allowance is enforced by the publication itself
+        // (P24-T01), so each finished demand is closed again: the window
+        // under test is the contact history, not the open demand count.
+        close_request(
+            db.pool(),
+            buyer,
+            demand,
+            BuyerOutcome::Found(OutcomeSource::Elsewhere),
+        )
+        .await
+        .expect("the finished demand closes");
         contacts.push(contact);
     }
     backdate_contact(

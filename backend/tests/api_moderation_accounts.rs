@@ -972,7 +972,14 @@ async fn ban_winning_contact_race_refuses_history_remains() {
             assert_eq!(rows[0].0, handoff.contact_id);
             assert_eq!(rows[0].1, 52_000);
         }
-        Err(ContactError::SellerNotActive) => {
+        // A ban that wins the race refuses the contact and records
+        // nothing. Which refusal it is depends on the interleaving: the ban
+        // invalidates the seller's live offer and restricts the account in
+        // one transaction, and the handoff reads the offer and the parties
+        // in two statements, so it can observe the invalidated offer or the
+        // restricted account first. Both refusals disclose nothing and
+        // write no contact.
+        Err(ContactError::ForbiddenState | ContactError::SellerNotActive) => {
             let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM contacts WHERE offer_id = $1")
                 .bind(offer)
                 .fetch_one(db.pool())

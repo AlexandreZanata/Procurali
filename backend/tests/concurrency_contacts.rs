@@ -173,48 +173,55 @@ async fn restriction_first_disables_handoff() {
         "known suite identity in the database name"
     );
     seed_catalog(db.pool()).await;
-    let author = seed_active(db.pool(), "Restricted Owner", "+55 11 90000-0401").await;
     let seller = seed_active(db.pool(), "Restricted Seller", "+55 11 90000-0402").await;
+    // One buyer holds at most three open requests (P24-T01), so each
+    // restriction fixture has its own buyer.
+    let author = seed_active(db.pool(), "Restricted Owner", "+55 11 90000-0401").await;
+    let withdrawn_author = seed_active(db.pool(), "Withdrawn Owner", "+55 11 90000-0403").await;
+    let blocked_author = seed_active(db.pool(), "Blocked Owner", "+55 11 90000-0404").await;
+    let suspended_author = seed_active(db.pool(), "Suspended Owner", "+55 11 90000-0405").await;
 
     // Declared order one: every restriction lands before the handoff, so
     // each attempt refuses with its defined error and records nothing.
-    let withdrawn = demand_with_offer(db.pool(), author, seller, "Withdrawn Fridge").await;
+    let withdrawn =
+        demand_with_offer(db.pool(), withdrawn_author, seller, "Withdrawn Fridge").await;
     withdraw_offer(db.pool(), seller, withdrawn.1, WithdrawReason::Withdrawn)
         .await
         .expect("fixture withdrawal withdraws");
     assert_eq!(
-        start_handoff(db.pool(), author, withdrawn.0, withdrawn.1).await,
+        start_handoff(db.pool(), withdrawn_author, withdrawn.0, withdrawn.1).await,
         Err(ContactError::ForbiddenState)
     );
     assert_eq!(contact_rows(db.pool(), withdrawn.1).await, 0);
 
-    let blocked = demand_with_offer(db.pool(), author, seller, "Blocked Fridge").await;
+    let blocked = demand_with_offer(db.pool(), blocked_author, seller, "Blocked Fridge").await;
     sqlx::query("INSERT INTO user_blocks (blocker_id, blocked_id) VALUES ($1, $2)")
-        .bind(author)
+        .bind(blocked_author)
         .bind(seller)
         .execute(db.pool())
         .await
         .expect("synthetic block applies");
     assert_eq!(
-        start_handoff(db.pool(), author, blocked.0, blocked.1).await,
+        start_handoff(db.pool(), blocked_author, blocked.0, blocked.1).await,
         Err(ContactError::Blocked)
     );
     assert_eq!(contact_rows(db.pool(), blocked.1).await, 0);
     sqlx::query("DELETE FROM user_blocks WHERE blocker_id = $1 AND blocked_id = $2")
-        .bind(author)
+        .bind(blocked_author)
         .bind(seller)
         .execute(db.pool())
         .await
         .expect("synthetic unblock applies");
 
-    let suspended = demand_with_offer(db.pool(), author, seller, "Suspended Fridge").await;
+    let suspended =
+        demand_with_offer(db.pool(), suspended_author, seller, "Suspended Fridge").await;
     sqlx::query("UPDATE users SET state = 'suspended' WHERE id = $1")
         .bind(seller)
         .execute(db.pool())
         .await
         .expect("synthetic suspension applies");
     assert_eq!(
-        start_handoff(db.pool(), author, suspended.0, suspended.1).await,
+        start_handoff(db.pool(), suspended_author, suspended.0, suspended.1).await,
         Err(ContactError::SellerNotActive)
     );
     assert_eq!(contact_rows(db.pool(), suspended.1).await, 0);

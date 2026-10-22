@@ -253,7 +253,7 @@ pub async fn start_contact(
             AttemptError::Abort(RequestEligibilityError::Expired) => ContactError::ExpiredRequest,
             AttemptError::Abort(RequestEligibilityError::NotFound) => ContactError::NotFound,
             AttemptError::Abort(_) => ContactError::ForbiddenState,
-            AttemptError::Db(_) => ContactError::StorageFailed,
+            AttemptError::Db(_) | AttemptError::Conflict => ContactError::StorageFailed,
         })?;
     // Currency mismatches on either side refuse as stale: a revised demand
     // strands the offer exactly like moved offer terms do — the buyer
