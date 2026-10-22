@@ -135,6 +135,9 @@ pub enum RenewError {
     NotFound,
     /// The row is a draft, terminal, suspended, or hidden row.
     ForbiddenState,
+    /// An identical open need already exists for this owner: renewing this
+    /// request would leave two identical open needs standing.
+    DuplicateIntent,
     /// The lookup or write failed.
     StorageFailed,
 }
@@ -150,6 +153,7 @@ impl std::fmt::Display for RenewError {
             Self::NotActive => f.write_str("account is not active"),
             Self::NotFound => f.write_str("request not found"),
             Self::ForbiddenState => f.write_str("request cannot be renewed"),
+            Self::DuplicateIntent => f.write_str("duplicate open demand exists"),
             Self::StorageFailed => f.write_str("renewal storage failed"),
         }
     }
@@ -241,6 +245,40 @@ pub async fn renew_request(
     if !confirmed_current {
         tx.rollback().await.map_err(|_| RenewError::StorageFailed)?;
         return Err(RenewError::StaleRequirements);
+    }
+    // The renewed cycle reopens this request, so the owner must not end up
+    // with two identical open needs (invariants 7.6): the same mechanical
+    // comparison the publication applies, against the owner's other open
+    // rows. The request being renewed is excluded — it is the need the
+    // renewal keeps.
+    {
+        use crate::application::duplicate_intent::{
+            matching_open_request_excluding, DuplicateError, NewIntent,
+        };
+        let candidate = NewIntent {
+            title: stored.title.clone(),
+            category_code: stored.category_code.clone(),
+            budget_cents: stored.budget_cents,
+            condition: stored.condition.clone(),
+            city_code: stored.city_code.clone(),
+            region_code: stored.region_code.clone(),
+        };
+        let matching =
+            matching_open_request_excluding(&mut tx, author_id, &candidate, Some(request_id))
+                .await
+                .map_err(|error| match error {
+                    crate::persistence::transaction::AttemptError::Abort(
+                        DuplicateError::StorageFailed,
+                    ) => RenewError::StorageFailed,
+                    crate::persistence::transaction::AttemptError::Db(_) => {
+                        RenewError::StorageFailed
+                    }
+                    _ => RenewError::StorageFailed,
+                })?;
+        if matching.is_some() {
+            tx.rollback().await.map_err(|_| RenewError::StorageFailed)?;
+            return Err(RenewError::DuplicateIntent);
+        }
     }
     let map_limit =
         |error: AttemptError<crate::application::request_limits::LimitError>| match error {

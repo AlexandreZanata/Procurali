@@ -111,6 +111,26 @@ pub async fn matching_open_request(
     author_id: uuid::Uuid,
     candidate: &NewIntent,
 ) -> Result<Option<uuid::Uuid>, AttemptError<DuplicateError>> {
+    matching_open_request_excluding(tx, author_id, candidate, None).await
+}
+
+/// The owner's open need identical to `candidate`, if one exists, ignoring
+/// `except`.
+///
+/// A renewal reopens the request it renews, so that request is not a
+/// duplicate of itself: the comparison skips it and looks only at the owner's
+/// other open needs.
+///
+/// # Errors
+///
+/// Returns [`AttemptError::Db`] on database failure (retryable only for
+/// genuine conflicts).
+pub async fn matching_open_request_excluding(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    author_id: uuid::Uuid,
+    candidate: &NewIntent,
+    except: Option<uuid::Uuid>,
+) -> Result<Option<uuid::Uuid>, AttemptError<DuplicateError>> {
     if normalize_for_comparison(&candidate.title).is_empty() {
         return Ok(None);
     }
@@ -125,9 +145,11 @@ pub async fn matching_open_request(
          WHERE request.author_id = $1
            AND request.state IN ('active', 'suspended')
            AND request.visibility <> 'hidden'
-           AND cycle.deadline > now()",
+           AND cycle.deadline > now()
+           AND ($2::uuid IS NULL OR request.id <> $2)",
     )
     .bind(author_id)
+    .bind(except)
     .fetch_all(&mut **tx)
     .await
     .map_err(AttemptError::Db)?;

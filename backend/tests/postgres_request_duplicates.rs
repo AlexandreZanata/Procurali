@@ -22,6 +22,9 @@ use procurali_backend::application::duplicate_intent::{
     check_duplicate_intent, matching_open_request, DuplicateError, NewIntent,
 };
 use procurali_backend::application::publish_request::publish_request;
+use procurali_backend::application::renew_request::{
+    renew_request, RenewError, RenewalConfirmation,
+};
 use procurali_backend::application::request_drafts::{create_draft, DraftInput};
 use procurali_backend::persistence::catalogs::{upsert_city, upsert_region};
 use procurali_backend::persistence::transaction::{
@@ -397,5 +400,214 @@ async fn concurrent_identical_publications_produce_one_active_intent() {
     .await
     .expect("events read");
     assert_eq!(facts, 1);
+    db.cleanup().await.expect("suite cleans up");
+}
+
+// --- P24-T02: the renewal refuses to duplicate an open need ----------------
+
+/// One renewal confirmation for the given requirements.
+fn renewal_confirmation(title: &str) -> RenewalConfirmation {
+    RenewalConfirmation {
+        title: title.to_owned(),
+        category_code: "home_appliances".to_owned(),
+        budget: "520.00".to_owned(),
+        condition: "either".to_owned(),
+        city_code: "campinas".to_owned(),
+        region_code: "centro".to_owned(),
+        notes: String::new(),
+    }
+}
+
+/// Move the current cycle of one request into the past, honoring the cycle
+/// CHECK (start and deadline travel together).
+async fn age_current_cycle(pool: &sqlx::PgPool, request_id: uuid::Uuid) {
+    let now = chrono::Utc::now();
+    sqlx::query(
+        "UPDATE request_cycles SET started_at = $2, deadline = $3
+         WHERE request_id = $1
+           AND cycle_number = (SELECT max(cycle_number) FROM request_cycles WHERE request_id = $1)",
+    )
+    .bind(request_id)
+    .bind(now - chrono::Duration::days(8))
+    .bind(now - chrono::Duration::days(1))
+    .execute(pool)
+    .await
+    .expect("synthetic expiry applies");
+}
+
+async fn cycles_for(pool: &sqlx::PgPool, request_id: uuid::Uuid) -> i64 {
+    sqlx::query_scalar("SELECT count(*) FROM request_cycles WHERE request_id = $1")
+        .bind(request_id)
+        .fetch_one(pool)
+        .await
+        .expect("cycles read")
+}
+
+async fn renewal_facts(pool: &sqlx::PgPool, author: uuid::Uuid) -> i64 {
+    sqlx::query_scalar(
+        "SELECT count(*) FROM business_events
+         WHERE actor_id = $1 AND kind = 'request.renewed'",
+    )
+    .bind(author)
+    .fetch_one(pool)
+    .await
+    .expect("facts read")
+}
+
+#[tokio::test]
+async fn a_renewal_that_duplicates_an_open_need_is_refused() {
+    let db = TestDatabase::create("p24t02_renew")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p24t02_renew_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let author = seed_author(db.pool(), "Renewal Owner", "+55 11 90000-0090").await;
+
+    // The first need ages out; while it is closed, the owner publishes the
+    // same need again, which is allowed because nothing identical is open.
+    let first = publish_open(db.pool(), author, "Refrigerator").await;
+    age_current_cycle(db.pool(), first).await;
+    sqlx::query("UPDATE requests SET state = 'expired' WHERE id = $1")
+        .bind(first)
+        .execute(db.pool())
+        .await
+        .expect("synthetic expiry applies");
+    let second = publish_open(db.pool(), author, "Refrigerator").await;
+    assert_ne!(first, second);
+
+    // Renewing the aged-out need would leave two identical open needs
+    // standing, so the renewal refuses and writes nothing.
+    let refused = renew_request(
+        db.pool(),
+        author,
+        first,
+        renewal_confirmation("Refrigerator"),
+    )
+    .await;
+    assert_eq!(refused, Err(RenewError::DuplicateIntent));
+    assert_eq!(
+        cycles_for(db.pool(), first).await,
+        1,
+        "the refused renewal opened no cycle"
+    );
+    assert_eq!(
+        renewal_facts(db.pool(), author).await,
+        0,
+        "the refused renewal recorded no fact"
+    );
+    assert_eq!(
+        open_count(db.pool(), author).await,
+        1,
+        "the refused renewal left the open needs untouched"
+    );
+
+    // The refusal names no other request: the reason is static.
+    assert!(!format!("{refused:?}").contains(&second.to_string()));
+    assert!(!format!("{refused:?}").contains("Refrigerator"));
+
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn a_renewal_without_an_identical_open_need_succeeds() {
+    let db = TestDatabase::create("p24t02_clear")
+        .await
+        .expect("disposable database allocates");
+    seed_catalog(db.pool()).await;
+    let author = seed_author(db.pool(), "Clear Owner", "+55 11 90000-0091").await;
+
+    // No twin: the aged-out need renews and opens its second cycle.
+    let first = publish_open(db.pool(), author, "Refrigerator").await;
+    age_current_cycle(db.pool(), first).await;
+    sqlx::query("UPDATE requests SET state = 'expired' WHERE id = $1")
+        .bind(first)
+        .execute(db.pool())
+        .await
+        .expect("synthetic expiry applies");
+    let renewed = renew_request(
+        db.pool(),
+        author,
+        first,
+        renewal_confirmation("Refrigerator"),
+    )
+    .await
+    .expect("the renewal succeeds without a twin");
+    assert_eq!(renewed.cycle_number, 2);
+    assert_eq!(cycles_for(db.pool(), first).await, 2);
+    assert_eq!(renewal_facts(db.pool(), author).await, 1);
+
+    // A near-duplicate (different wording) is not an identical need and
+    // never blocks the renewal.
+    let near = publish_open(db.pool(), author, "Freezer").await;
+    age_current_cycle(db.pool(), near).await;
+    sqlx::query("UPDATE requests SET state = 'expired' WHERE id = $1")
+        .bind(near)
+        .execute(db.pool())
+        .await
+        .expect("synthetic expiry applies");
+    renew_request(db.pool(), author, near, renewal_confirmation("Freezer"))
+        .await
+        .expect("a near-duplicate does not block the renewal");
+
+    // A closed twin frees the need: the removal never authorizes a
+    // duplicate, but a closed row is no longer open. A separate owner keeps
+    // this block inside the rolling activation allowance (P24-T01).
+    let twin_owner = seed_author(db.pool(), "Twin Owner", "+55 11 90000-0093").await;
+    let twin = publish_open(db.pool(), twin_owner, "Washer").await;
+    age_current_cycle(db.pool(), twin).await;
+    sqlx::query("UPDATE requests SET state = 'expired' WHERE id = $1")
+        .bind(twin)
+        .execute(db.pool())
+        .await
+        .expect("synthetic expiry applies");
+    let other = publish_open(db.pool(), twin_owner, "Washer").await;
+    sqlx::query("UPDATE requests SET state = 'cancelled' WHERE id = $1")
+        .bind(other)
+        .execute(db.pool())
+        .await
+        .expect("synthetic closure applies");
+    renew_request(db.pool(), twin_owner, twin, renewal_confirmation("Washer"))
+        .await
+        .expect("a closed twin does not block the renewal");
+
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn an_active_request_renews_inside_its_final_hours() {
+    let db = TestDatabase::create("p24t02_active")
+        .await
+        .expect("disposable database allocates");
+    seed_catalog(db.pool()).await;
+    let author = seed_author(db.pool(), "Final Owner", "+55 11 90000-0092").await;
+
+    // A request renewed inside its final day is still open, so the
+    // comparison must not treat it as a duplicate of itself.
+    let request = publish_open(db.pool(), author, "Microwave").await;
+    let now = chrono::Utc::now();
+    sqlx::query(
+        "UPDATE request_cycles SET started_at = $2, deadline = $3
+         WHERE request_id = $1 AND cycle_number = 1",
+    )
+    .bind(request)
+    .bind(now - chrono::Duration::days(6))
+    .bind(now + chrono::Duration::hours(6))
+    .execute(db.pool())
+    .await
+    .expect("synthetic final day applies");
+    let renewed = renew_request(
+        db.pool(),
+        author,
+        request,
+        renewal_confirmation("Microwave"),
+    )
+    .await
+    .expect("the request renews inside its final day");
+    assert_eq!(renewed.cycle_number, 2);
+    assert_eq!(renewal_facts(db.pool(), author).await, 1);
+
     db.cleanup().await.expect("suite cleans up");
 }
