@@ -14,10 +14,13 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use procurali_backend::application::phone_verification::FakeVerifyProvider;
+use procurali_backend::application::phone_verification::{
+    CheckOutcome, FakeVerifyProvider, StartOutcome, VerificationError, VerificationProvider,
+};
 use procurali_backend::http::app::Application;
 use procurali_backend::operations::config::{PhoneProvider, Settings};
 use procurali_backend::operations::lifecycle::serve;
+use procurali_backend::operations::twilio_verify::{HttpsTransport, TwilioLiveProvider};
 use procurali_backend::operations::worker::run_worker;
 use procurali_backend::persistence::migrations;
 use procurali_backend::persistence::pool::{self, PoolConfig};
@@ -176,24 +179,61 @@ async fn run() -> Result<(), String> {
     result.map_err(|_| "the HTTP server stopped unexpectedly".to_owned())
 }
 
-/// The proof provider this build can serve.
+/// The proof provider this build serves.
 ///
 /// The deterministic fake is served only where the configuration already
-/// allows test doubles. The live Verify provider is refused: its HTTPS
-/// transport is not part of this build, and a served binary must never
-/// pretend that a proof was delivered.
-fn select_provider(settings: &Settings) -> Result<FakeVerifyProvider, String> {
+/// allows test doubles. The live Verify provider is served over its bounded
+/// HTTPS transport; credentials and the owner-supplied live inputs still
+/// decide whether production can start, but the binary never pretends that
+/// a proof was delivered.
+enum ServedProvider {
+    Fake(FakeVerifyProvider),
+    Twilio(TwilioLiveProvider<HttpsTransport>),
+}
+
+impl VerificationProvider for ServedProvider {
+    async fn start_verification(&self, phone: &str) -> Result<StartOutcome, VerificationError> {
+        match self {
+            Self::Fake(provider) => provider.start_verification(phone).await,
+            Self::Twilio(provider) => provider.start_verification(phone).await,
+        }
+    }
+
+    async fn check_verification(
+        &self,
+        phone: &str,
+        code: &str,
+    ) -> Result<CheckOutcome, VerificationError> {
+        match self {
+            Self::Fake(provider) => provider.check_verification(phone, code).await,
+            Self::Twilio(provider) => provider.check_verification(phone, code).await,
+        }
+    }
+}
+
+/// Choose the served provider from validated settings.
+///
+/// Returns a refusal naming the missing field when the selected provider
+/// cannot be constructed; values never appear in the message.
+fn select_provider(settings: &Settings) -> Result<ServedProvider, String> {
     match settings.phone_provider() {
         PhoneProvider::Fake => {
             let code = settings
                 .fake_verify_code()
                 .ok_or_else(|| "FAKE_VERIFY_CODE is required".to_owned())?;
-            Ok(FakeVerifyProvider::for_tests(code))
+            Ok(ServedProvider::Fake(FakeVerifyProvider::for_tests(code)))
         }
-        PhoneProvider::Twilio => Err(
-            "PHONE_PROVIDER=twilio needs the live Verify transport, which this build does not carry"
-                .to_owned(),
-        ),
+        PhoneProvider::Twilio => {
+            let config = settings
+                .twilio_config()
+                .ok_or_else(|| "the live Verify adapter is missing its configuration".to_owned())
+                .and_then(|configured| configured.map_err(|error| error.to_string()))?;
+            let transport =
+                HttpsTransport::from_config(&config).map_err(|error| error.to_string())?;
+            Ok(ServedProvider::Twilio(TwilioLiveProvider::new(
+                config, transport,
+            )))
+        }
     }
 }
 
@@ -253,16 +293,21 @@ mod tests {
         for environment in ["test", "development"] {
             let settings = settings(&base(environment));
             let provider = select_provider(&settings).expect("the fake provider is served here");
-            assert_eq!(
-                provider,
-                FakeVerifyProvider::for_tests("135790"),
-                "the served provider is the configured deterministic one"
-            );
+            match provider {
+                ServedProvider::Fake(fake) => assert_eq!(
+                    fake,
+                    FakeVerifyProvider::for_tests("135790"),
+                    "the served provider is the configured deterministic one"
+                ),
+                ServedProvider::Twilio(_) => {
+                    panic!("the fake configuration must not serve the live adapter")
+                }
+            }
         }
     }
 
     #[test]
-    fn the_live_provider_is_refused_without_a_transport() {
+    fn the_live_provider_is_served_over_its_bounded_transport() {
         let mut pairs = base("test");
         pairs.retain(|(key, _)| *key != "FAKE_VERIFY_CODE");
         pairs.push(("PHONE_PROVIDER", "twilio"));
@@ -270,8 +315,12 @@ mod tests {
         pairs.push(("TWILIO_AUTH_TOKEN", "synthetic-token"));
         pairs.push(("TWILIO_VERIFY_SERVICE_SID", "synthetic-service"));
         let settings = settings(&pairs);
-        let refusal = select_provider(&settings).expect_err("the live provider is refused");
-        assert!(refusal.contains("twilio"));
+        match select_provider(&settings).expect("the live provider is served here") {
+            ServedProvider::Twilio(_) => {}
+            ServedProvider::Fake(_) => {
+                panic!("the live configuration must not serve the fake")
+            }
+        }
     }
 
     #[test]

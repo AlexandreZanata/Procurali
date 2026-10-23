@@ -63,9 +63,12 @@ Timing differences between known/unknown phones are not a supported signal.
 
 ## Live-provider gate
 
-Twilio Verify is the planned live adapter. Sending real verifications requires an
-authorized account/service, credentials, budget, destination scope, and notice wording
-from the owner. Missing credentials block live certification only; deterministic local
+Twilio Verify is the live adapter: the signed configuration, request, and
+response boundary is implemented (`TwilioLiveProvider`), and the served binary
+carries a bounded HTTPS transport for it (no redirects, configured timeout).
+Sending real verifications still requires an authorized account/service,
+credentials, budget, destination scope, and notice wording from the owner.
+Missing credentials block live certification only; deterministic local
 construction with the fake continues. A fake success never proves real phone control.
 
 Boundary cases are frozen in `contracts/auth-cases.json`; the decision rationale is in

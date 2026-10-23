@@ -2,6 +2,11 @@
 
 This records significant documentation and business-baseline changes. It is not evidence of application implementation or a substitute for the canonical topic text.
 
+## October 23, 2026 — The served binary serves the live Verify adapter on `codex/backend-mvp`
+
+- Added the live Twilio Verify HTTPS transport (bounded per-exchange timeout, no redirects) and wired it into the served binary: `PHONE_PROVIDER=twilio` now serves the live adapter over real HTTPS instead of refusing to start. Sending real verifications still waits on the owner's authorized account, credentials, budget, destination scope, and notice wording.
+- Validated origin and timeout configuration by name (`TWILIO_BASE_URL`, `TWILIO_TIMEOUT_SECS`); values never reach logs or errors.
+
 ## October 23, 2026 — The request limits apply where requests are created on `codex/backend-mvp`
 
 - Enforced the request-creation rules at the flows that create them: publication now applies the three-open-slot and rolling activation allowance inside the same guarded transaction that activates the cycle, and renewal refuses to reopen a need the owner already has open with the same mechanical duplicate-intent comparison. A refused attempt writes no cycle, fact, or activation.

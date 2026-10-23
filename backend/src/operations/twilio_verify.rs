@@ -98,7 +98,7 @@ impl std::fmt::Debug for TwilioConfig {
 }
 
 /// Loopback HTTP is approved only for isolated test doubles.
-fn is_approved_origin(url: &str) -> bool {
+pub(crate) fn is_approved_origin(url: &str) -> bool {
     if let Some(rest) = url.strip_prefix("https://") {
         return !rest.is_empty();
     }

@@ -242,3 +242,37 @@ fn debug_output_never_contains_secret_values() {
     assert!(!rendered.contains("135790"));
     assert!(rendered.contains("Development"));
 }
+
+#[test]
+fn live_origin_and_timeout_are_validated_by_name() {
+    let mut values = production_values();
+    values.insert(
+        "TWILIO_BASE_URL".to_owned(),
+        "http://evil.invalid".to_owned(),
+    );
+    let error = Settings::from_map(&values).expect_err("non-loopback HTTP origin refused");
+    assert!(format!("{error}").contains("TWILIO_BASE_URL"));
+    assert!(!format!("{error}").contains("evil.invalid"));
+
+    let mut values = production_values();
+    values.insert("TWILIO_TIMEOUT_SECS".to_owned(), "0".to_owned());
+    let error = Settings::from_map(&values).expect_err("zero timeout refused");
+    assert!(format!("{error}").contains("TWILIO_TIMEOUT_SECS"));
+
+    let mut values = production_values();
+    values.insert("TWILIO_TIMEOUT_SECS".to_owned(), "forever".to_owned());
+    let error = Settings::from_map(&values).expect_err("non-numeric timeout refused");
+    assert!(format!("{error}").contains("TWILIO_TIMEOUT_SECS"));
+
+    let mut values = production_values();
+    values.insert(
+        "TWILIO_BASE_URL".to_owned(),
+        "http://127.0.0.1:9".to_owned(),
+    );
+    let settings = Settings::from_map(&values).expect("loopback test double allowed");
+    let config = settings
+        .twilio_config()
+        .expect("live provider carries adapter configuration")
+        .expect("loopback adapter configuration validates");
+    assert_eq!(config.timeout(), std::time::Duration::from_secs(10));
+}

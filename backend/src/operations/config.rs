@@ -14,6 +14,9 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+use super::twilio_verify::{is_approved_origin, TwilioConfig};
 
 use thiserror::Error;
 
@@ -115,6 +118,8 @@ pub struct Settings {
     twilio_account_sid: Option<Secret>,
     twilio_auth_token: Option<Secret>,
     twilio_verify_service_sid: Option<Secret>,
+    twilio_base_url: String,
+    twilio_timeout: Duration,
     session_key: Secret,
     public_origin: Option<String>,
     test_fixed_clock: Option<String>,
@@ -132,6 +137,13 @@ pub const DEFAULT_ASSETS_DIR: &str = "web/dist";
 /// Default bind address: loopback only, so an unconfigured process never
 /// listens on a public interface.
 pub const DEFAULT_BIND_ADDRESS: &str = "127.0.0.1:8080";
+
+/// Default Verify origin: the production Twilio endpoint.
+/// `TWILIO_BASE_URL` overrides it for an isolated loopback test double only.
+pub const DEFAULT_TWILIO_BASE_URL: &str = "https://verify.twilio.com";
+
+/// Default Verify exchange timeout, in seconds.
+pub const DEFAULT_TWILIO_TIMEOUT_SECS: u64 = 10;
 
 impl Settings {
     /// Minimum session-key length accepted in production.
@@ -220,16 +232,43 @@ impl Settings {
             }
         };
 
-        let (twilio_account_sid, twilio_auth_token, twilio_verify_service_sid) =
-            if phone_provider == PhoneProvider::Twilio {
-                (
-                    Some(Secret(required("TWILIO_ACCOUNT_SID")?)),
-                    Some(Secret(required("TWILIO_AUTH_TOKEN")?)),
-                    Some(Secret(required("TWILIO_VERIFY_SERVICE_SID")?)),
-                )
-            } else {
-                (None, None, None)
+        let (
+            twilio_account_sid,
+            twilio_auth_token,
+            twilio_verify_service_sid,
+            twilio_base_url,
+            twilio_timeout,
+        ) = if phone_provider == PhoneProvider::Twilio {
+            let base_url =
+                get("TWILIO_BASE_URL").unwrap_or_else(|| DEFAULT_TWILIO_BASE_URL.to_owned());
+            if !is_approved_origin(&base_url) {
+                return Err(ConfigError::invalid("TWILIO_BASE_URL"));
+            }
+            let timeout_secs = match get("TWILIO_TIMEOUT_SECS") {
+                Some(raw) => raw
+                    .parse::<u64>()
+                    .map_err(|_| ConfigError::invalid("TWILIO_TIMEOUT_SECS"))?,
+                None => DEFAULT_TWILIO_TIMEOUT_SECS,
             };
+            if timeout_secs == 0 || Duration::from_secs(timeout_secs) > TwilioConfig::MAX_TIMEOUT {
+                return Err(ConfigError::invalid("TWILIO_TIMEOUT_SECS"));
+            }
+            (
+                Some(Secret(required("TWILIO_ACCOUNT_SID")?)),
+                Some(Secret(required("TWILIO_AUTH_TOKEN")?)),
+                Some(Secret(required("TWILIO_VERIFY_SERVICE_SID")?)),
+                base_url,
+                Duration::from_secs(timeout_secs),
+            )
+        } else {
+            (
+                None,
+                None,
+                None,
+                DEFAULT_TWILIO_BASE_URL.to_owned(),
+                Duration::from_secs(DEFAULT_TWILIO_TIMEOUT_SECS),
+            )
+        };
 
         let session_key = Secret(required("SESSION_KEY")?);
         if environment == Environment::Production
@@ -289,6 +328,8 @@ impl Settings {
             twilio_account_sid,
             twilio_auth_token,
             twilio_verify_service_sid,
+            twilio_base_url,
+            twilio_timeout,
             session_key,
             public_origin,
             test_fixed_clock,
@@ -356,6 +397,25 @@ impl Settings {
         self.fake_verify_code.as_ref().map(Secret::expose)
     }
 
+    /// Validated Twilio Verify adapter configuration, when the live provider
+    /// is selected. The caller keeps the secrets; only the validated origin
+    /// and timeout travel with this value. `None` when the fake is selected.
+    #[must_use]
+    pub fn twilio_config(&self) -> Option<Result<TwilioConfig, ConfigError>> {
+        let (sid, token, service) = (
+            self.twilio_account_sid.as_ref()?.expose(),
+            self.twilio_auth_token.as_ref()?.expose(),
+            self.twilio_verify_service_sid.as_ref()?.expose(),
+        );
+        Some(TwilioConfig::new(
+            sid.to_owned(),
+            token.to_owned(),
+            service.to_owned(),
+            self.twilio_base_url.clone(),
+            self.twilio_timeout,
+        ))
+    }
+
     /// Directory holding the built web bundle.
     #[must_use]
     pub fn assets_dir(&self) -> &Path {
@@ -393,6 +453,8 @@ impl fmt::Debug for Settings {
                 "twilio_verify_service_sid",
                 &self.twilio_verify_service_sid.as_ref().map(|_| "set"),
             )
+            .field("twilio_base_url", &"set")
+            .field("twilio_timeout_secs", &self.twilio_timeout.as_secs())
             .field("session_key", &self.session_key)
             .field("public_origin", &self.public_origin.as_ref().map(|_| "set"))
             .field(

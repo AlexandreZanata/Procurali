@@ -30,8 +30,9 @@ Specifications describe intended behavior; implementation evidence lives
 in the verification tiers above, not in documentation alone.
 
 Known construction follow-ups (not launch blockers for local
-correctness): the live phone-verification transport. Mobile apps, Radar
-Pro, subscriptions, and paid passes remain future work.
+correctness): the live phone verification (authorized Verify account,
+credentials, destination scope). Mobile apps, Radar Pro, subscriptions,
+and paid passes remain future work.
 
 ## Open operational choices before public launch
 

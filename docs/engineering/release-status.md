@@ -64,10 +64,10 @@ deploying any environment is a separate, unauthorized-by-default step.
 
 ## Known construction follow-ups (not live gates)
 
-- The live Twilio Verify HTTPS transport is not part of this build: the
-  served binary refuses `PHONE_PROVIDER=twilio` instead of pretending a
-  proof was delivered. Production startup therefore still waits on that
-  transport and on the authorized staging inputs.
+- The served binary carries the live Twilio Verify HTTPS transport
+  (bounded timeout, no redirects) and serves the live adapter when
+  `PHONE_PROVIDER=twilio` is configured. Production startup still waits
+  on the owner's Verify credentials and on the authorized staging inputs.
 - The owner notices now reach the owner: a publication or renewal schedules
   its cycle's expiry sweep, the first contact of a cycle schedules the
   outcome prompt, and the expiry sweep schedules the renewal/outcome prompt.
@@ -91,7 +91,7 @@ deploying any environment is a separate, unauthorized-by-default step.
 
 | Gate | Status | Missing input |
 |---|---|---|
-| Live phone verification (real provider proof, not fake) | pending | Authorized Verify account/service, credentials, budget, destination scope, consent configuration, one test destination, and the live HTTPS transport for it |
+| Live phone verification (real provider proof, not fake) | pending | Authorized Verify account/service, credentials, budget, destination scope, consent configuration, and one test destination (the live HTTPS transport ships in the build) |
 | Staging host with real HTTPS origin and cookie transport | pending | Authorized Linux host, access method, domain/DNS, TLS configuration, runtime secrets |
 | Off-host backup restore from the actual destination | pending | Approved destination, encryption/key custody, retention, restore credentials, schedule |
 | Public launch authorization | pending | Launch city, moderation ownership and hours, user notices, explicit release authorization, pilot targets |
