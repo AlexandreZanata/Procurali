@@ -17,7 +17,8 @@ use procurali_backend::application::phone_verification::{
 use procurali_backend::operations::config::{Environment, Settings};
 use procurali_backend::operations::twilio_verify::{
     build_check_request, build_start_request, parse_check_response, parse_start_response,
-    OutgoingRequest, TransportOutcome, TwilioConfig, TwilioLiveProvider, VerifyTransport,
+    HttpsTransport, OutgoingRequest, TransportOutcome, TwilioConfig, TwilioLiveProvider,
+    VerifyTransport,
 };
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Mutex;
@@ -451,6 +452,117 @@ async fn synthetic_http_server_round_trip() {
     assert!(observed[0].2.contains("Channel=sms"));
     assert!(observed[1].2.contains("Code=135790"));
     assert!(observed[2].2.contains("Code=000000"));
+}
+
+#[tokio::test]
+async fn https_transport_serves_the_live_provider_over_real_http() {
+    let server = SyntheticVerify::start("135790").await;
+    let config = TwilioConfig::new(
+        "canary-account-sid".to_owned(),
+        "canary-auth-token".to_owned(),
+        "canary-service-sid".to_owned(),
+        format!("http://{}", server.address),
+        Duration::from_secs(10),
+    )
+    .expect("loopback test config validates");
+    let transport = HttpsTransport::from_config(&config).expect("transport builds");
+    let provider = TwilioLiveProvider::new(config, transport);
+
+    assert_eq!(
+        provider
+            .start_verification("+55 11 98765-4321")
+            .await
+            .expect("start works"),
+        StartOutcome::ChallengeSent
+    );
+    assert_eq!(
+        provider
+            .check_verification("+5511987654321", "135790")
+            .await
+            .expect("correct code checks"),
+        CheckOutcome::Verified
+    );
+    assert_eq!(
+        provider
+            .check_verification("+5511987654321", "000000")
+            .await
+            .expect("wrong code checks"),
+        CheckOutcome::Incorrect
+    );
+
+    let observed = server.observed.lock().expect("record lock").clone();
+    assert_eq!(
+        observed.len(),
+        3,
+        "the transport sent every provider request"
+    );
+    assert!(observed[0].1.starts_with("Basic "));
+    assert!(observed[0].2.contains("To=%2B5511987654321"));
+    assert!(observed[1].2.contains("Code=135790"));
+    assert!(observed[2].2.contains("Code=000000"));
+}
+
+#[tokio::test]
+async fn https_transport_bounds_timeout_and_connection_failure() {
+    // A closed loopback port is a connection failure, not a timeout.
+    let closed = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("loopback binds");
+    let closed_address = closed.local_addr().expect("address reads");
+    drop(closed);
+    let config = TwilioConfig::new(
+        "canary-account-sid".to_owned(),
+        "canary-auth-token".to_owned(),
+        "canary-service-sid".to_owned(),
+        format!("http://{closed_address}"),
+        Duration::from_millis(200),
+    )
+    .expect("loopback test config validates");
+    let provider = TwilioLiveProvider::new(
+        config.clone(),
+        HttpsTransport::from_config(&config).expect("transport builds"),
+    );
+    assert_eq!(
+        provider
+            .start_verification("+5511987654321")
+            .await
+            .expect_err("closed port fails"),
+        VerificationError::ConnectionFailed
+    );
+
+    // A server that answers slower than the configured timeout is a timeout.
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("loopback binds");
+    let address = listener.local_addr().expect("address reads");
+    tokio::spawn(async move {
+        if let Ok((mut socket, _)) = listener.accept().await {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            use tokio::io::AsyncWriteExt;
+            let _ = socket
+                .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\n{}")
+                .await;
+        }
+    });
+    let config = TwilioConfig::new(
+        "canary-account-sid".to_owned(),
+        "canary-auth-token".to_owned(),
+        "canary-service-sid".to_owned(),
+        format!("http://{address}"),
+        Duration::from_millis(100),
+    )
+    .expect("loopback test config validates");
+    let provider = TwilioLiveProvider::new(
+        config.clone(),
+        HttpsTransport::from_config(&config).expect("transport builds"),
+    );
+    assert_eq!(
+        provider
+            .start_verification("+5511987654321")
+            .await
+            .expect_err("slow server times out"),
+        VerificationError::Timeout
+    );
 }
 
 #[test]

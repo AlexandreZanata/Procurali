@@ -4,7 +4,8 @@
 in `backend/Cargo.lock` (P01-T01) and `web/package-lock.json` (P15).
 **Verified:** October 8, 2026 against crates.io and the npm registry from this workstation;
 the TLS dependency patch bumps of October 20, 2026 (`rustls` 0.23.46,
-`rustls-webpki` 0.103.16, `webpki-roots` 1.0.10) were verified the same way.
+`rustls-webpki` 0.103.16, `webpki-roots` 1.0.10) and the `reqwest` 0.12.28
+transport addition of October 23, 2026 were verified the same way.
 **Scope:** Free MVP backend, reproducible infrastructure, minimal plain-TypeScript web UI.
 Mobile, commercial, and optional Redis-acceleration dependencies are excluded unless marked optional.
 
@@ -23,7 +24,7 @@ P01-T01 records the exact toolchain file; CI uses stable.
 | Crate | Pinned line (verified 2026-10-08) | Purpose | License |
 |---|---|---|---|
 | axum | 0.8.x (latest observed 0.8.9) | HTTP routing, extractors | MIT |
-| tokio | 1.x (latest observed 1.53.2), features `full` restricted to net/time/signal/macros/rt | Async runtime | MIT |
+| tokio | 1.x (latest observed 1.54.1), features `full` restricted to net/time/signal/macros/rt | Async runtime | MIT |
 | sqlx | 0.8.x (latest observed 0.8.6; 0.9.0 exists but is not adopted until proven compatible) | Parameterized PostgreSQL access, migrations; features `runtime-tokio`, `postgres`, `uuid`, `chrono`, `migrate` | MIT OR Apache-2.0 |
 | serde / serde_json | 1.x (latest observed 1.0.229) | Explicit request/response DTOs | MIT OR Apache-2.0 |
 | uuid | 1.x (latest observed 1.27.0), features `v7`, `serde` | UUIDv7 identifiers | MIT OR Apache-2.0 |
@@ -33,6 +34,7 @@ P01-T01 records the exact toolchain file; CI uses stable.
 | thiserror | 2.x | Structured domain/HTTP error types | MIT OR Apache-2.0 |
 | tracing / tracing-subscriber | 0.1.x / 0.3.x with `json`, `env-filter` | Redacted structured logs | MIT |
 | config | 0.15.x | Validated environment configuration | MIT OR Apache-2.0 |
+| reqwest | 0.12.28, `rustls-tls` only (no default features) | Live Twilio Verify HTTPS transport; bounded timeout, no redirects | MIT OR Apache-2.0 |
 
 No Git development branch and no `latest` tag is used. Exact patches are resolved by Cargo
 in P01-T01 and frozen in `Cargo.lock`. SQLx 0.9 is deferred until its PostgreSQL runtime

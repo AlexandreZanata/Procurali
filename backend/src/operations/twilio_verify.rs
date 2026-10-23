@@ -5,9 +5,8 @@
 //! classification (sent/verified/incorrect/rate-limited/rejected/malformed),
 //! and redacted errors. The byte transport itself is injected through
 //! [`VerifyTransport`], so unit tests script every provider behavior without
-//! network access and without new dependencies; the production HTTPS transport
-//! lands with the card that introduces the HTTP client dependency
-//! (explicit follow-through, not a silent substitution).
+//! network access; [`HttpsTransport`] is the production transport over
+//! reqwest with the validated timeout and no redirect following.
 //!
 //! Start and check use the provider's endpoints under
 //! `{base}/v2/Services/{service_sid}/`: `Verifications` (challenge send) and
@@ -326,8 +325,8 @@ pub enum TransportOutcome {
 
 /// Byte transport for provider requests.
 ///
-/// The production HTTPS implementation lands with the card that introduces the
-/// HTTP client dependency; tests inject scripted or loopback transports here.
+/// Tests inject scripted or loopback transports; [`HttpsTransport`] is the
+/// production implementation.
 pub trait VerifyTransport: Send + Sync {
     /// POST one form request and report the exchange outcome.
     fn post_form(
@@ -347,6 +346,71 @@ impl<T> TwilioLiveProvider<T> {
     #[must_use]
     pub fn new(config: TwilioConfig, transport: T) -> Self {
         Self { config, transport }
+    }
+}
+
+/// Production HTTPS transport for the Verify adapter.
+///
+/// The client uses the validated provider timeout, follows no redirects (so
+/// the Basic credential never leaves the configured origin), and maps a
+/// timeout or a lost connection to the typed transport failures.
+pub struct HttpsTransport {
+    client: reqwest::Client,
+}
+
+impl HttpsTransport {
+    /// Build the transport from validated configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`VerificationError::ConnectionFailed`] when the HTTP client
+    /// cannot be built; the message carries no secret or URL.
+    pub fn from_config(config: &TwilioConfig) -> Result<Self, VerificationError> {
+        let client = reqwest::Client::builder()
+            .timeout(config.timeout())
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|_| VerificationError::ConnectionFailed)?;
+        Ok(Self { client })
+    }
+}
+
+impl std::fmt::Debug for HttpsTransport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HttpsTransport").finish_non_exhaustive()
+    }
+}
+
+fn transport_failure(error: &reqwest::Error) -> TransportOutcome {
+    if error.is_timeout() {
+        TransportOutcome::TimedOut
+    } else {
+        TransportOutcome::ConnectionFailed
+    }
+}
+
+impl VerifyTransport for HttpsTransport {
+    async fn post_form(&self, request: OutgoingRequest) -> TransportOutcome {
+        let sent = self
+            .client
+            .post(request.url())
+            .header(reqwest::header::AUTHORIZATION, request.authorization())
+            .header(
+                reqwest::header::CONTENT_TYPE,
+                "application/x-www-form-urlencoded",
+            )
+            .body(request.body().to_owned())
+            .send()
+            .await;
+        let response = match sent {
+            Ok(response) => response,
+            Err(error) => return transport_failure(&error),
+        };
+        let status = response.status().as_u16();
+        match response.text().await {
+            Ok(body) => TransportOutcome::Received { status, body },
+            Err(error) => transport_failure(&error),
+        }
     }
 }
 
