@@ -5,6 +5,9 @@
 //! `PUT /api/v1/requests/drafts/:id` replaces its requirements (200);
 //! `POST /api/v1/requests/drafts/:id/publication` publishes it into its
 //! first seven-day cycle (201, or 200 replaying an existing publication);
+//! `POST /api/v1/requests/:id/renewal` renews one eligible owned request
+//! into a fresh seven-day cycle with the buyer-confirmed requirements
+//! (200).
 //! `GET /api/v1/requests` lists the owner's requests newest-first with
 //! derived timing and permitted actions (200);
 //! `GET /api/v1/requests/:id` returns one owned request with its cycles and
@@ -35,6 +38,9 @@ use std::collections::HashMap;
 
 use super::errors::{ApiError, Code};
 use crate::application::publish_request::{publish_request, PublishError, PublishedRequest};
+use crate::application::renew_request::{
+    renew_request, RenewError, RenewalConfirmation, RenewedRequest,
+};
 use crate::application::request_drafts::{
     create_draft, edit_draft, get_draft, DraftError, DraftInput,
 };
@@ -68,6 +74,7 @@ pub fn routes(state: RequestsState) -> Router {
         .route("/api/v1/requests/drafts/{id}/publication", post(publish))
         .route("/api/v1/requests", get(list))
         .route("/api/v1/requests/{id}", get(detail))
+        .route("/api/v1/requests/{id}/renewal", post(renew))
         .with_state(state)
 }
 
@@ -267,6 +274,33 @@ fn publish_error(error: PublishError) -> Response {
 }
 
 /// Exact-grammar money refusal with the budget field attached.
+fn renewal_error(error: RenewError) -> Response {
+    match error {
+        RenewError::InvalidAmount(error) => money_error(error).into_response(),
+        // Missing or inactive accounts share the anonymous refusal: the
+        // account is unusable either way.
+        RenewError::NotActive => {
+            ApiError::new(Code::Unauthenticated, "no usable session").into_response()
+        }
+        // Missing and non-owned rows share one 404: strangers learn nothing.
+        RenewError::NotFound => ApiError::new(Code::NotFound, "request not found").into_response(),
+        // Changed requirements, an early attempt, and an ineligible row are
+        // state refusals: revise first, wait for the final day, or stop.
+        RenewError::StaleRequirements | RenewError::EarlyRenewal | RenewError::ForbiddenState => {
+            ApiError::new(Code::ForbiddenState, "request cannot be renewed").into_response()
+        }
+        RenewError::DuplicateIntent => {
+            ApiError::new(Code::DuplicateIntent, "duplicate open demand exists").into_response()
+        }
+        // The slot and the activation allowance share the closed rolling
+        // allowance registry: one gate, no new code invented for renewal.
+        RenewError::OpenSlotsExhausted | RenewError::ActivationQuotaExhausted => {
+            ApiError::new(Code::QuotaExceeded, "request allowance exhausted").into_response()
+        }
+        RenewError::StorageFailed => ApiError::internal().into_response(),
+    }
+}
+
 fn money_error(error: MoneyError) -> ApiError {
     let base = ApiError::from(error);
     let code = match error {
@@ -499,6 +533,84 @@ async fn publish(
         Ok(published) => published_response(published, replay),
         Err(error) => publish_error(error),
     }
+}
+
+/// Renewal confirmation body: the buyer-confirmed current requirements in
+/// full. Author, state, cycle, timestamp, or any other key is refused as
+/// unknown.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RenewalBody {
+    title: Option<String>,
+    category_code: Option<String>,
+    budget: Option<String>,
+    condition: Option<String>,
+    city_code: Option<String>,
+    region_code: Option<String>,
+    notes: Option<String>,
+}
+
+/// Renew one eligible owned request into a fresh seven-day cycle (200).
+async fn renew(
+    State(state): State<RequestsState>,
+    headers: HeaderMap,
+    Path(id): Path<uuid::Uuid>,
+    body: Bytes,
+) -> Response {
+    let user_id = match authenticated_user(&state, &headers).await {
+        Ok(user_id) => user_id,
+        Err(error) => return error.into_response(),
+    };
+    if let Some(response) = origin_refused(&headers) {
+        return response;
+    }
+    let confirmation: RenewalBody = match serde_json::from_slice(&body) {
+        Ok(confirmation) => confirmation,
+        Err(_) => {
+            return ApiError::new(
+                Code::InvalidField,
+                "request body must match the route schema",
+            )
+            .into_response();
+        }
+    };
+    let Some(confirmation) = renewal_confirmation(confirmation) else {
+        return ApiError::new(Code::MissingField, "renewal requirements are incomplete")
+            .into_response();
+    };
+    match renew_request(&state.pool, user_id, id, confirmation).await {
+        Ok(renewed) => renewed_response(renewed),
+        Err(error) => renewal_error(error),
+    }
+}
+
+/// Every confirmation key is required: a renewal confirms the whole demand.
+fn renewal_confirmation(body: RenewalBody) -> Option<RenewalConfirmation> {
+    Some(RenewalConfirmation {
+        title: body.title?,
+        category_code: body.category_code?,
+        budget: body.budget?,
+        condition: body.condition?,
+        city_code: body.city_code?,
+        region_code: body.region_code?,
+        notes: body.notes?,
+    })
+}
+
+fn renewed_response(renewed: RenewedRequest) -> Response {
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "id": renewed.id,
+            "cycle_number": renewed.cycle_number,
+            "revision_number": renewed.revision_number,
+            "started_at": renewed.started_at,
+            "deadline": renewed.deadline,
+            "original_published_at": renewed.original_published_at,
+            "state": renewed.state,
+        })),
+    )
+        .into_response()
 }
 
 fn published_response(published: PublishedRequest, replay: bool) -> Response {

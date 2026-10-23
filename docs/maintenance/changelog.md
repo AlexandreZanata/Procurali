@@ -2,6 +2,10 @@
 
 This records significant documentation and business-baseline changes. It is not evidence of application implementation or a substitute for the canonical topic text.
 
+## October 23, 2026 — The explicit renewal route on `codex/backend-mvp`
+
+- Exposed `POST /api/v1/requests/{id}/renewal`: an owner-confirmed renewal of an eligible request renews into a fresh seven-day cycle (200) with its identity retained. Anonymous, stranger, early, stale-confirmation, duplicate, and exhausted-allowance attempts are refused with the same typed codes the application rules already define. The owner action vocabulary still advertises no `renew` capability, and the request screens carry no renewal button; both stay explicit follow-ups.
+
 ## October 23, 2026 — The served binary serves the live Verify adapter on `codex/backend-mvp`
 
 - Added the live Twilio Verify HTTPS transport (bounded per-exchange timeout, no redirects) and wired it into the served binary: `PHONE_PROVIDER=twilio` now serves the live adapter over real HTTPS instead of refusing to start. Sending real verifications still waits on the owner's authorized account, credentials, budget, destination scope, and notice wording.

@@ -61,6 +61,11 @@ deploying any environment is a separate, unauthorized-by-default step.
 - The owner notices reach the owner: publication, renewal, and the expiry
   sweep schedule their notices and prompts, and the served worker delivers
   them over real HTTP.
+- The explicit renewal route ships on `148dd89`'s child revisions: the owner
+  renewal operation answers over HTTP with typed refusals, verified by the
+  api tier (`api_request_renewal` route tests plus the updated
+  `api_authorization_matrix` expectations). The `renew` owner action and the
+  renewal button stay future work.
 
 ## Known construction follow-ups (not live gates)
 

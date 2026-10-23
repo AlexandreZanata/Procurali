@@ -417,7 +417,6 @@ async fn hidden_actions_refuse_forged_direct_requests() {
     for (method, path) in [
         ("POST", format!("/api/v1/offers/{demand}/decline")),
         ("POST", format!("/api/v1/offers/{demand}/withdrawal")),
-        ("POST", format!("/api/v1/requests/{demand}/renewal")),
         ("POST", "/api/v1/outcomes".to_owned()),
         ("POST", "/api/v1/feedback".to_owned()),
         ("POST", "/api/v1/staff/ban".to_owned()),
@@ -433,6 +432,19 @@ async fn hidden_actions_refuse_forged_direct_requests() {
         .await;
         assert_eq!(status, StatusCode::NOT_FOUND, "hidden {path}");
     }
+
+    // The renewal route exists: an owner request that matches no readable
+    // body is refused as a schema error, never a hidden-route 404.
+    let (status, denied) = raw(
+        app.clone(),
+        "POST",
+        &format!("/api/v1/requests/{demand}/renewal"),
+        Some(&buyer_cookie),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(denied["code"], "missing_field");
 
     // Published demands are invisible to the draft reader (stale edits).
     let (status, _) = raw(

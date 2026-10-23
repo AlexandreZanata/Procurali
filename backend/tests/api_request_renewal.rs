@@ -17,17 +17,26 @@
 #[path = "support/database.rs"]
 mod database;
 
+use axum::body::Body;
+use axum::http::{Request, StatusCode};
 use database::TestDatabase;
+use procurali_backend::application::phone_verification::FakeVerifyProvider;
 use procurali_backend::application::publish_request::publish_request;
 use procurali_backend::application::renew_request::{
     renew_request, RenewError, RenewalConfirmation,
 };
 use procurali_backend::application::request_drafts::{create_draft, DraftInput};
+use procurali_backend::http::accounts::{routes as account_routes, AccountsState};
+use procurali_backend::http::auth::{routes as auth_routes, AuthState};
+use procurali_backend::http::requests::{routes as request_routes, RequestsState};
 use procurali_backend::persistence::catalogs::{upsert_city, upsert_region};
 use procurali_backend::persistence::requests::{
     cycles_for_request, request as read_request, requests_for_author,
 };
 use procurali_backend::persistence::users::{create_user, NewUser, PhoneKeys};
+use serde_json::{json, Value};
+use std::sync::Arc;
+use tower::ServiceExt;
 
 async fn seed_catalog(pool: &sqlx::PgPool) {
     let mut tx = pool.begin().await.expect("transaction begins");
@@ -69,6 +78,157 @@ async fn seed_author(pool: &sqlx::PgPool, display: &str, phone: &str) -> uuid::U
         .await
         .expect("synthetic activation applies");
     user.id
+}
+
+const HTTP_FAKE_CODE: &str = "135790";
+
+fn http_app(db: &TestDatabase) -> axum::Router {
+    let provider = Arc::new(FakeVerifyProvider::for_tests(HTTP_FAKE_CODE));
+    let lookup = "p06t05-test-only-lookup-key".to_owned();
+    let encryption = "p06t05-test-only-encryption-key".to_owned();
+    account_routes(AccountsState::new(
+        db.pool().clone(),
+        Arc::clone(&provider),
+        lookup.clone(),
+        encryption.clone(),
+    ))
+    .merge(auth_routes(AuthState::new(
+        db.pool().clone(),
+        provider,
+        lookup,
+        encryption,
+        None,
+    )))
+    .merge(request_routes(RequestsState::new(db.pool().clone())))
+}
+
+async fn http_call(
+    app: axum::Router,
+    method: &str,
+    path: &str,
+    body: Option<Value>,
+    cookie: Option<&str>,
+) -> (StatusCode, Value) {
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(path)
+        .header("content-type", "application/json")
+        .header("host", "app.test")
+        .header("origin", "http://app.test");
+    if let Some(cookie) = cookie {
+        builder = builder.header("cookie", cookie);
+    }
+    let body = body.map_or_else(Body::empty, |value| Body::from(value.to_string()));
+    let response = app
+        .oneshot(builder.body(body).expect("test request builds"))
+        .await
+        .expect("route responds");
+    let status = response.status();
+    let bytes = axum::body::to_bytes(response.into_body(), 65_536)
+        .await
+        .expect("body reads");
+    if bytes.is_empty() {
+        return (status, Value::Null);
+    }
+    let parsed: Value = serde_json::from_slice(&bytes).expect("response JSON parses");
+    (status, parsed)
+}
+
+/// Provision one active account through the real account routes and return
+/// its session cookie for the HTTP renewal boundary.
+async fn http_login(app: &axum::Router, phone: &str, name: &str) -> String {
+    let (status, _) = http_call(
+        app.clone(),
+        "POST",
+        "/api/v1/accounts",
+        Some(json!({
+            "display_name": name,
+            "phone": phone,
+            "city": "Campinas",
+            "region": "SP",
+            "policy_version": "v1",
+        })),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, _) = http_call(
+        app.clone(),
+        "POST",
+        "/api/v1/accounts/challenges",
+        Some(json!({"phone": phone})),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    let (status, active) = http_call(
+        app.clone(),
+        "POST",
+        "/api/v1/accounts/challenges/confirmations",
+        Some(json!({"phone": phone, "code": HTTP_FAKE_CODE})),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(active["account_state"], "active");
+    let response = app
+        .clone()
+        .oneshot(
+            Request::post("/api/v1/sessions")
+                .header("content-type", "application/json")
+                .header("host", "app.test")
+                .header("origin", "http://app.test")
+                .body(Body::from(
+                    json!({"phone": phone, "code": HTTP_FAKE_CODE}).to_string(),
+                ))
+                .expect("test request builds"),
+        )
+        .await
+        .expect("login responds");
+    assert_eq!(response.status(), StatusCode::OK);
+    response
+        .headers()
+        .get("set-cookie")
+        .and_then(|value| value.to_str().ok())
+        .expect("login sets a cookie")
+        .split(';')
+        .next()
+        .expect("cookie pair")
+        .to_owned()
+}
+
+/// Publish one owned demand through the real draft and publication routes.
+/// Exact duplicates refuse at publication, so independent fixtures need
+/// distinct titles.
+async fn publish_demand_over_http(app: &axum::Router, cookie: &str, title: &str) -> String {
+    let (status, draft) = http_call(
+        app.clone(),
+        "POST",
+        "/api/v1/requests/drafts",
+        Some(json!({
+            "title": title,
+            "category_code": "home_appliances",
+            "budget": "600.00",
+            "condition": "either",
+            "city_code": "campinas",
+            "region_code": "centro",
+            "notes": "Preferably frost-free.",
+        })),
+        Some(cookie),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let id = draft["id"].as_str().expect("draft id").to_owned();
+    let (status, _) = http_call(
+        app.clone(),
+        "POST",
+        &format!("/api/v1/requests/drafts/{id}/publication"),
+        Some(json!({})),
+        Some(cookie),
+    )
+    .await;
+    assert!(status == StatusCode::CREATED || status == StatusCode::OK);
+    id
 }
 
 fn confirmation() -> RenewalConfirmation {
@@ -361,4 +521,184 @@ async fn terminal_suspended_and_hidden_rows_never_reactivate() {
     assert_eq!(event_count(db.pool(), author, "request.published").await, 5);
     assert_eq!(event_count(db.pool(), author, "request.renewed").await, 1);
     db.cleanup().await.expect("suite cleans up");
+}
+
+/// The HTTP renewal route: one owned expired demand renews over the route
+/// with the buyer-confirmed requirements; strangers, anonymous callers, and
+/// out-of-window attempts are refused with typed errors and no new cycle.
+fn route_confirmation(title: &str) -> Value {
+    json!({
+        "title": title,
+        "category_code": "home_appliances",
+        "budget": "600.00",
+        "condition": "either",
+        "city_code": "campinas",
+        "region_code": "centro",
+        "notes": "Preferably frost-free.",
+    })
+}
+
+#[tokio::test]
+async fn renewal_route_confirms_an_expired_demand_over_http() {
+    let db = TestDatabase::create("p25t04_http")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p25t04_http_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let app = http_app(&db);
+    let owner = http_login(&app, "+55 11 90000-0091", "Route Owner").await;
+    let id = publish_demand_over_http(&app, &owner, "Route Fridge").await;
+
+    // A fresh seven-day cycle refuses renewal: one typed refusal, one cycle.
+    let (status, refused) = http_call(
+        app.clone(),
+        "POST",
+        &format!("/api/v1/requests/{id}/renewal"),
+        Some(route_confirmation("Route Fridge")),
+        Some(&owner),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(refused["code"], "forbidden_state");
+    assert_eq!(
+        cycles_for_request(db.pool(), id.parse().expect("demand id parses"))
+            .await
+            .expect("cycles read")
+            .len(),
+        1
+    );
+
+    // The expired demand renews over the route with its identity retained.
+    sqlx::query("UPDATE request_cycles SET started_at = now() - interval '8 days', deadline = now() - interval '1 day' WHERE request_id = $1 AND cycle_number = 1")
+        .bind(id.parse::<uuid::Uuid>().expect("demand id parses"))
+        .execute(db.pool())
+        .await
+        .expect("synthetic expiry applies");
+    let (status, renewed) = http_call(
+        app.clone(),
+        "POST",
+        &format!("/api/v1/requests/{id}/renewal"),
+        Some(route_confirmation("Route Fridge")),
+        Some(&owner),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(renewed["id"], id);
+    assert_eq!(renewed["cycle_number"], 2);
+    assert_eq!(renewed["revision_number"], 1);
+    assert_eq!(renewed["state"], "active");
+    assert!(renewed["original_published_at"].is_string());
+
+    // The second attempt lands on the fresh cycle: refused, nothing written.
+    let (status, refused) = http_call(
+        app.clone(),
+        "POST",
+        &format!("/api/v1/requests/{id}/renewal"),
+        Some(route_confirmation("Route Fridge")),
+        Some(&owner),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(refused["code"], "forbidden_state");
+    assert_eq!(
+        cycles_for_request(db.pool(), id.parse().expect("demand id parses"))
+            .await
+            .expect("cycles read")
+            .len(),
+        2
+    );
+
+    db.cleanup().await.expect("suite cleans up");
+}
+
+#[tokio::test]
+async fn renewal_route_refuses_strangers_anonymous_and_stale_bodies() {
+    let db = TestDatabase::create("p25t04_route_guards")
+        .await
+        .expect("disposable database allocates");
+    assert!(
+        db.name().starts_with("procurali_test_p25t04_route_guards_"),
+        "known suite identity in the database name"
+    );
+    seed_catalog(db.pool()).await;
+    let app = http_app(&db);
+    let owner = http_login(&app, "+55 11 90000-0092", "Route Buyer").await;
+    let stranger = http_login(&app, "+55 11 90000-0093", "Route Stranger").await;
+    let id = publish_demand_over_http(&app, &owner, "Route Freezer").await;
+    let path = format!("/api/v1/requests/{id}/renewal");
+    let demand: uuid::Uuid = id.parse().expect("demand id parses");
+
+    // Strangers and anonymous callers never renew: one 404, one 401, no
+    // disclosure of ownership or liveness beyond the refusal.
+    let (status, denied) = http_call(
+        app.clone(),
+        "POST",
+        &path,
+        Some(route_confirmation("Route Freezer")),
+        Some(&stranger),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(denied["code"], "not_found");
+    let (status, denied) = http_call(
+        app.clone(),
+        "POST",
+        &path,
+        Some(route_confirmation("Route Freezer")),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(denied["code"], "unauthenticated");
+
+    // Unknown keys are refused as unknown: the confirmation carries exactly
+    // the requirements vocabulary.
+    let mut overposted = route_confirmation("Route Freezer");
+    overposted["author_id"] = json!("00000000-0000-0000-0000-000000000000");
+    let (status, denied) =
+        http_call(app.clone(), "POST", &path, Some(overposted), Some(&owner)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(denied["code"], "invalid_field");
+
+    // A material difference refuses first: revise, then renew.
+    sqlx::query("UPDATE request_cycles SET started_at = now() - interval '8 days', deadline = now() - interval '1 day' WHERE request_id = $1 AND cycle_number = 1")
+        .bind(demand)
+        .execute(db.pool())
+        .await
+        .expect("synthetic expiry applies");
+    let mut stale = route_confirmation("Route Freezer");
+    stale["budget"] = json!("800.00");
+    let (status, denied) = http_call(app.clone(), "POST", &path, Some(stale), Some(&owner)).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(denied["code"], "forbidden_state");
+    assert_eq!(
+        cycles_for_request(db.pool(), demand)
+            .await
+            .expect("cycles read")
+            .len(),
+        1
+    );
+    assert_eq!(
+        event_count(
+            db.pool(),
+            demand_owner(db.pool(), demand).await,
+            "request.renewed"
+        )
+        .await,
+        0
+    );
+
+    db.cleanup().await.expect("suite cleans up");
+}
+
+/// The owner of one stored request, for fact accounting in guard tests.
+async fn demand_owner(pool: &sqlx::PgPool, id: uuid::Uuid) -> uuid::Uuid {
+    read_request(pool, id)
+        .await
+        .expect("request reads")
+        .expect("request reads")
+        .author_id
 }
