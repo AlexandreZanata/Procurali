@@ -1,6 +1,6 @@
 # Release status
 
-**Updated:** 2026-10-21  
+**Updated:** 2026-10-23  
 **Branch:** `codex/backend-mvp` (construction; not a launch authorization)  
 **Head tested:** `7c3474e` (`P22-T01: Seed the harness state and orchestrate
 the disposable e2e stack`; the release-status commit that follows adds these
@@ -49,9 +49,21 @@ deploying any environment is a separate, unauthorized-by-default step.
   --serve-smoke`), and the operational smoke flow passes against a served
   target (`scripts/smoke.sh --database-url ... --base-url ...`).
 
+## Changes after the tested matrix
+
+- The request-creation limits now apply where requests are created:
+  publication enforces the three-open-slot and rolling activation
+  allowance inside its guarded transaction, and renewal refuses to reopen
+  an identical open need. The constructor tested this on `148dd89` with
+  `check.sh fast` plus the integration, api, concurrency, ops, and privacy
+  tiers; the full release matrix and e2e run above remain recorded at
+  `7c3474e`.
+- The owner notices reach the owner: publication, renewal, and the expiry
+  sweep schedule their notices and prompts, and the served worker delivers
+  them over real HTTP.
+
 ## Known construction follow-ups (not live gates)
 
-- Renewal-path duplicate enforcement remains open.
 - The live Twilio Verify HTTPS transport is not part of this build: the
   served binary refuses `PHONE_PROVIDER=twilio` instead of pretending a
   proof was delivered. Production startup therefore still waits on that

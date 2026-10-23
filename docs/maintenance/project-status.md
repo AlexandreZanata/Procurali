@@ -1,7 +1,7 @@
 # Project status
 
-**Updated:** October 21, 2026  
-**Phase:** Implementation verification on the construction branch `codex/backend-mvp` (mandatory phases P00–P19, P21, and P22 implemented; optional P20 Redis deferred)  
+**Updated:** October 23, 2026  
+**Phase:** Implementation verification on the construction branch `codex/backend-mvp` (mandatory phases P00–P19 and P21–P24 implemented; optional P20 Redis deferred)  
 **Business baseline:** Recommended version 1.1
 
 ## Available artifacts
@@ -30,9 +30,8 @@ Specifications describe intended behavior; implementation evidence lives
 in the verification tiers above, not in documentation alone.
 
 Known construction follow-ups (not launch blockers for local
-correctness): renewal-path duplicate enforcement and the live
-phone-verification transport. Mobile apps, Radar Pro, subscriptions, and
-paid passes remain future work.
+correctness): the live phone-verification transport. Mobile apps, Radar
+Pro, subscriptions, and paid passes remain future work.
 
 ## Open operational choices before public launch
 

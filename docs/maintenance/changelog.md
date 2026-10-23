@@ -2,6 +2,12 @@
 
 This records significant documentation and business-baseline changes. It is not evidence of application implementation or a substitute for the canonical topic text.
 
+## October 23, 2026 — The request limits apply where requests are created on `codex/backend-mvp`
+
+- Enforced the request-creation rules at the flows that create them: publication now applies the three-open-slot and rolling activation allowance inside the same guarded transaction that activates the cycle, and renewal refuses to reopen a need the owner already has open with the same mechanical duplicate-intent comparison. A refused attempt writes no cycle, fact, or activation.
+- Verified the change on `148dd89` with `check.sh fast` and the integration, api, concurrency, ops, and privacy tiers over disposable PostgreSQL; the fourth-open and seventh-activation refusals, the duplicate-renewal refusal, and the successful in-window renewal all have named tests.
+- Removed the completed renewal follow-up from the project and release status. The live Twilio Verify HTTPS transport and every owner-supplied live gate remain open and are not claimed as done.
+
 ## October 21, 2026 — The owner notices reach the owner on `codex/backend-mvp`
 
 - Wired the background jobs into the business flows: a publication or a renewal schedules its cycle's expiry sweep, the first contact of a cycle schedules the outcome prompt, and the expiry sweep schedules the renewal/outcome prompt. The job row commits with the business fact that schedules it, so a live cycle always carries the work that ends it and a refused mutation schedules nothing.
